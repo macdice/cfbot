@@ -47,7 +47,7 @@ for submission in $(ls $PATCHES/current | grep -v ".tmp" ) ; do
           echo "=== Building..."
           prefix=/tmp/cfmon-$$
           rm -fr $prefix
-          ( ./my_configure.sh && make clean && make ) || success=0
+          ( ./configure --prefix=$HOME/install --enable-cassert --enable-debug CC="ccache gcc" && make clean && make ) || success=0
           echo "=== Successfully built: $success"
           if [ $success = "0" ] ; then
             echo "Build failed: #$submission, [$status], message $message_id" >> $fail_log
@@ -60,7 +60,7 @@ for submission in $(ls $PATCHES/current | grep -v ".tmp" ) ; do
               cat src/test/regress/regression.diffs
               echo "Regression tests failed: #$submission, [$status], message $message_id" >> $fail_log
             else
-              ( cd src/test/isolation && gmake check ) || success=0
+              ( cd src/test/isolation && make check ) || success=0
               if [ $success = "0" ] ; then
                 echo "=== Dumping regression.diffs due to isolation test failure"
                 cat src/test/isolation/output_iso/regression.diffs
