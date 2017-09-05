@@ -334,15 +334,17 @@ def build_web_page(commitfest_id, submissions):
 """)
   os.rename("www/index.html.tmp", "www/index.html")
 
-def prepare_filesystem(commitfest_id):
-  """Create necessary directories and check out PostgreSQL source tree, if
-     they aren't already present."""
+def prepare_repo():
   # set up a repo if we don't already have one
   if not os.path.exists("postgresql"):
     subprocess.check_call("rm -fr postgresql.tmp", shell=True)
     subprocess.check_call("git clone %s postgresql.tmp" % (PG_REPO,), shell=True)
     subprocess.check_call("cd postgresql.tmp && git remote add cfbot-repo %s" % (CFBOT_REPO,), shell=True)
     subprocess.check_call("mv postgresql.tmp postgresql", shell=True)
+
+def prepare_filesystem(commitfest_id):
+  """Create necessary directories and check out PostgreSQL source tree, if
+     they aren't already present."""
   # set up the other directories we need
   if not os.path.exists("www"):
     os.mkdir("www")
@@ -379,6 +381,7 @@ def run():
     # another copy is already running in this directory, so exit quietly (for
     # example if a cronjob starts before the last one has finished)
     return
+  prepare_repo()
   commit_id = update_tree()
   commitfest_id = get_current_commitfest_id()
   prepare_filesystem(commitfest_id)
