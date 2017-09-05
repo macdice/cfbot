@@ -3,7 +3,7 @@
 # Fetch the latest Commitfest patches.  The resulting tree of files looks like
 # this:
 #
-# PATCH_DIR
+# "patches"
 #   14               = commitfest ID
 #     1234           = commitfest submission ID
 #       name         = commitfest submission name
@@ -25,22 +25,31 @@ import urllib
 import urllib2
 import urlparse
 
+# settings used when polling the commitfest and mail archive apps
 SLOW_FETCH_SLEEP = 0.0
-PATCH_DIR = "patches"
 USER_AGENT = "Personal Commitfest crawler of Thomas Munro <munro@ip9.org>"
 
-APPLY_PASSING_SVG = """
-<svg xmlns="http://www.w3.org/2000/svg" width="90" height="20"><linearGradient id="a" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><rect rx="3" width="90" height="20" fill="#555"/><rect rx="3" x="37" width="53" height="20" fill="#4c1"/><path fill="#4c1" d="M37 0h4v20h-4z"/><rect rx="3" width="90" height="20" fill="url(#a)"/><g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11"><text x="19.5" y="15" fill="#010101" fill-opacity=".3">apply</text><text x="19.5" y="14">apply</text><text x="62.5" y="15" fill="#010101" fill-opacity=".3">passing</text><text x="62.5" y="14">passing</text></g></svg>
-"""
+# where to pull PostgreSQL master branch from
+PG_REPO="git://git.postgresql.org/git/postgresql.git"
 
-APPLY_FAILING_SVG = """
-<svg xmlns="http://www.w3.org/2000/svg" width="81" height="20"><linearGradient id="a" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><rect rx="3" width="81" height="20" fill="#555"/><rect rx="3" x="37" width="44" height="20" fill="#e05d44"/><path fill="#e05d44" d="M37 0h4v20h-4z"/><rect rx="3" width="81" height="20" fill="url(#a)"/><g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11"><text x="19.5" y="15" fill="#010101" fill-opacity=".3">apply</text><text x="19.5" y="14">apply</text><text x="58" y="15" fill="#010101" fill-opacity=".3">failing</text><text x="58" y="14">failing</text></g></svg>
-"""
+# where to push automatically generated branches
+PUSH_BRANCHES = False
+CFBOT_REPO="git@github.com:postgresql-cfbot/postgresql.git"
+CFBOT_REPO_SSH_COMMAND="ssh -i ~/.ssh/cfbot_github_rsa"
 
+# travis build settings that will be added to automatically generated branches
 TRAVIS_FILE = """
 language: c
 cache: ccache
 script: ./configure && make && make check && (cd src/test/isolation && make check)
+"""
+
+# images used for "apply" badges
+APPLY_PASSING_SVG = """
+<svg xmlns="http://www.w3.org/2000/svg" width="90" height="20"><linearGradient id="a" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><rect rx="3" width="90" height="20" fill="#555"/><rect rx="3" x="37" width="53" height="20" fill="#4c1"/><path fill="#4c1" d="M37 0h4v20h-4z"/><rect rx="3" width="90" height="20" fill="url(#a)"/><g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11"><text x="19.5" y="15" fill="#010101" fill-opacity=".3">apply</text><text x="19.5" y="14">apply</text><text x="62.5" y="15" fill="#010101" fill-opacity=".3">passing</text><text x="62.5" y="14">passing</text></g></svg>
+"""
+APPLY_FAILING_SVG = """
+<svg xmlns="http://www.w3.org/2000/svg" width="81" height="20"><linearGradient id="a" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><rect rx="3" width="81" height="20" fill="#555"/><rect rx="3" x="37" width="44" height="20" fill="#e05d44"/><path fill="#e05d44" d="M37 0h4v20h-4z"/><rect rx="3" width="81" height="20" fill="url(#a)"/><g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11"><text x="19.5" y="15" fill="#010101" fill-opacity=".3">apply</text><text x="19.5" y="14">apply</text><text x="58" y="15" fill="#010101" fill-opacity=".3">failing</text><text x="58" y="14">failing</text></g></svg>
 """
 
 def slow_fetch(url):
@@ -133,14 +142,14 @@ def sort_and_rotate_submissions(submissions, last_submission_id):
 
 def check_patches(commitfest_id, commit_id, n):
   # make sure the commitfest directory and current symlink exist
-  if not os.path.isdir(os.path.join(PATCH_DIR, commitfest_id)):
-    os.mkdir(os.path.join(PATCH_DIR, commitfest_id))
-  if os.path.exists(os.path.join(PATCH_DIR, "current")):
-    os.unlink(os.path.join(PATCH_DIR, "current"))
-  os.symlink(commitfest_id, os.path.join(PATCH_DIR, "current"))
+  if not os.path.isdir(os.path.join("patches", commitfest_id)):
+    os.mkdir(os.path.join("patches", commitfest_id))
+  if os.path.exists(os.path.join("patches", "current")):
+    os.unlink(os.path.join("patches", "current"))
+  os.symlink(commitfest_id, os.path.join("patches", "current"))
 
   # process patches in order, starting after the last one we looked at
-  last_submission_id_path = os.path.join(PATCH_DIR, commitfest_id, "last_submission_id")
+  last_submission_id_path = os.path.join("patches", commitfest_id, "last_submission_id")
   if os.path.exists(last_submission_id_path):
     last_submission_id = read_file(last_submission_id_path)
   else:
@@ -150,7 +159,7 @@ def check_patches(commitfest_id, commit_id, n):
 
   # now process n submissions
   for submission_id, name, status in submissions:
-    patch_dir = os.path.join(PATCH_DIR, commitfest_id, submission_id)
+    patch_dir = os.path.join("patches", commitfest_id, submission_id)
     if os.path.isdir(patch_dir):
       write_file(os.path.join(patch_dir, "status"), status)
       write_file(os.path.join(patch_dir, "name"), name)
@@ -186,7 +195,7 @@ def check_patches(commitfest_id, commit_id, n):
       # if the commit ID has moved since last time, or we
       # have a new patchest, then we need to make a new branch
       # to trigger a new build
-      commit_id_path = os.path.join(PATCH_DIR, commitfest_id, submission_id, "commit_id")
+      commit_id_path = os.path.join("patches", commitfest_id, submission_id, "commit_id")
       if not os.path.exists(commit_id_path) or read_file(commit_id_path) != commit_id:
         branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
         subprocess.check_call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master", shell=True)
@@ -208,7 +217,7 @@ def check_patches(commitfest_id, commit_id, n):
                 if popen.returncode != 0:
                   failed_to_apply = True
                   break
-        apply_status_path = os.path.join(PATCH_DIR, commitfest_id, submission_id, "apply_status")
+        apply_status_path = os.path.join("patches", commitfest_id, submission_id, "apply_status")
         if failed_to_apply:
           write_file(apply_status_path, "failing")
         else:
@@ -226,8 +235,9 @@ Patches fetched from: https://www.postgresql.org/message-id/%s
 """ % (submission_id, commitfest_id, submission_id, message_id))
           subprocess.check_call("cd postgresql && git commit -q -F ../commit_message", shell=True)
           write_file(commit_id_path, commit_id)
-          os.environ["GIT_SSH_COMMAND"] = 'ssh -i ~/.ssh/cfbot_github_rsa'
-          subprocess.check_call("cd postgresql && git push -q -f github %s" % (branch,), shell=True)
+          if PUSH_BRANCHES:
+            os.environ["GIT_SSH_COMMAND"] = 'ssh -i ~/.ssh/cfbot_github_rsa'
+            subprocess.check_call("cd postgresql && git push -q -f github %s" % (branch,), shell=True)
           n = n - 1
 
       # remember this ID so we can start after this next time
@@ -244,10 +254,10 @@ def sort_status_name(tup):
 
 def write_web_page(commitfest_id):
   submissions = []
-  for submission_id in os.listdir(os.path.join(PATCH_DIR, commitfest_id)):
+  for submission_id in os.listdir(os.path.join("patches", commitfest_id)):
     if submission_id in (".", ".."):
       continue
-    submission_dir = os.path.join(PATCH_DIR, commitfest_id, submission_id)
+    submission_dir = os.path.join("patches", commitfest_id, submission_id)
     apply_status_path = os.path.join(submission_dir, "apply_status")
     message_id_path = os.path.join(submission_dir, "message_id")
     name_path = os.path.join(submission_dir, "name")
@@ -301,9 +311,32 @@ def write_web_page(commitfest_id):
 """)
   os.rename("www/index.html.tmp", "www/index.html")
 
-if __name__ == "__main__":
+def setup():
+  """Create necessary directories and check out PostgreSQL source tree, if
+     they aren't already present."""
+  # set up a repo if we don't already have one
+  if not os.path.exists("postgresql"):
+    subprocess.check_call("rm -fr postgresql.tmp", shell=True)
+    subprocess.check_call("git clone %s postgresql.tmp" % (PG_REPO,), shell=True)
+    subprocess.check_call("cd postgresql.tmp && git remote add cfbot-repo %s" % (CFBOT_REPO,), shell=True)
+    subprocess.check_call("mv postgresql.tmp postgresql", shell=True)
+  # set up the other directories we need
+  if not os.path.exists("www"):
+    os.mkdir("www")
+  if not os.path.exists("log"):
+    os.mkdir("log")
+  if not os.path.exists("patches"):
+    os.mkdir("patches")
+
+def update_tree():
+  """Pull changes from PostgreSQL master and return the HEAD commit ID."""
   subprocess.call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master && git pull -q", shell=True)
   commit_id = subprocess.check_output("cd postgresql && git show | head -1 | cut -d' ' -f2", shell=True).strip()
+  return commit_id
+
+if __name__ == "__main__":
+  setup()
+  commit_id = update_tree()
   commitfest_id = scrape_current_commitfest_id()
   check_patches(commitfest_id, commit_id, 2)
   write_web_page(commitfest_id)
