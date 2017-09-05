@@ -235,6 +235,8 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
         if failed_to_apply:
           log.write("    apply failed (see apply log for details)\n")
           write_file(apply_status_path, "failing")
+          # no point in trying again until either the message ID or the commit ID moves
+          write_file(commit_id_path, commit_id)
         else:
           write_file(apply_status_path, "passing")
           write_file("postgresql/.travis.yml", TRAVIS_FILE)
