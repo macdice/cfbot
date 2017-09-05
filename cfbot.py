@@ -28,9 +28,10 @@ import urllib
 import urllib2
 import urlparse
 
-# settings used when polling the commitfest and mail archive apps
-SLOW_FETCH_SLEEP = 0.0
+# politeness settings
+SLOW_FETCH_SLEEP = 1.0
 USER_AGENT = "Personal Commitfest crawler of Thomas Munro <munro@ip9.org>"
+MAX_BRANCHES_TO_PUSH = 2
 
 # where to pull PostgreSQL master branch from
 PG_REPO="git://git.postgresql.org/git/postgresql.git"
@@ -370,7 +371,7 @@ def try_lock():
     else:
       return None
 
-def run(num_to_check):
+def run():
   lock = try_lock()
   if not lock:
     # another copy is already running in this directory, so exit quietly (for
@@ -385,10 +386,10 @@ def run(num_to_check):
     log.write("== starting at %s\n" % str(datetime.datetime.now()))
     log.write("commitfest = %s\n" % commitfest_id)
     log.write("commit = %s\n" % commit_id)
-    check_n_submissions(log, commit_id, commitfest_id, submissions, num_to_check)
+    check_n_submissions(log, commit_id, commitfest_id, submissions, MAX_BRANCHES_TO_PUSH)
     log.write("== finishing at %s\n" % str(datetime.datetime.now()))
   build_web_page(commitfest_id, submissions)
   lock.close()
 
 if __name__ == "__main__":
-  run(2)
+  run()
