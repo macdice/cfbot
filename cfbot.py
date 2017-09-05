@@ -15,6 +15,8 @@
 #       zzz.patch
 #       ...
 
+import errno
+import fcntl
 import HTMLParser
 import os
 import re
@@ -351,7 +353,24 @@ def update_tree():
   commit_id = subprocess.check_output("cd postgresql && git show | head -1 | cut -d' ' -f2", shell=True).strip()
   return commit_id
 
+def try_lock():
+  """Make sure that only one copy runs."""
+  fd = open("lock-file", "w")
+  try:
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    return fd
+  except IOError as e:
+    if e.errno != errno.EAGAIN:
+      raise
+    else:
+      return None
+
 def run(num_to_check):
+  lock = try_lock()
+  if not lock:
+    # another copy is already running in this directory, so exit quietly (for
+    # example if a cronjob starts before the last one has finished)
+    return
   commit_id = update_tree()
   commitfest_id = get_current_commitfest_id()
   prepare_filesystem(commitfest_id)
@@ -359,6 +378,7 @@ def run(num_to_check):
   submissions = filter(lambda s: s.status in ("Ready for Committer", "Needs review"), submissions)
   check_n_submissions(commit_id, commitfest_id, submissions, num_to_check)
   build_web_page(commitfest_id, submissions)
+  lock.close()
 
 if __name__ == "__main__":
   run(2)
