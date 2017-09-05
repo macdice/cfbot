@@ -210,11 +210,10 @@ def check_n_submissions(commit_id, commitfest_id, submissions, n):
       if not os.path.exists(commit_id_path) or read_file(commit_id_path) != commit_id:
         branch = "commitfest/%s/%s" % (commitfest_id, submission.id)
         subprocess.check_call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master", shell=True)
-        subprocess.call("cd postgresql && git branch -q -D %s" % (branch,), shell=True) # ignore if fail
-        subprocess.check_call("cd postgresql && git checkout -b %s" % (branch,), shell=True)
         failed_to_apply = False
         with open(os.path.join("logs", commitfest_id, str(submission.id) + ".log"), "w") as log:
-          log.write("== Applying patchset on commit %s\n" % commit_id)
+          log.write("== Fetched patches from message ID %s\n" % message_id)
+          log.write("== Applying on top of commit %s\n" % commit_id)
           for path in sorted(os.listdir(patch_dir)):
             if path.endswith(".patch"):
               print path
@@ -232,6 +231,8 @@ def check_n_submissions(commit_id, commitfest_id, submissions, n):
         else:
           write_file(apply_status_path, "passing")
           write_file("postgresql/.travis.yml", TRAVIS_FILE)
+          subprocess.call("cd postgresql && git branch -q -D %s > /dev/null 2> /dev/null" % (branch,), shell=True) # ignore if fail
+          subprocess.check_call("cd postgresql && git checkout -q -b %s" % (branch,), shell=True)
           subprocess.check_call("cd postgresql && git add -A", shell=True)
           write_file("commit_message", """Automatic commit for Commitfest submission #%s.
 
