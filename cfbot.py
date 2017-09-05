@@ -39,6 +39,7 @@ APPLY_FAILING_SVG = """
 
 TRAVIS_FILE = """
 language: c
+cache: ccache
 script: ./configure && make && make check && (cd src/test/isolation && make check)
 """
 
@@ -107,15 +108,11 @@ def scrape_current_commitfest_id():
   """Find the ID of the current open or next future commitfest."""
   result = None
   for line in slow_fetch("https://commitfest.postgresql.org").splitlines():
-    groups = re.search('<a href="/([0-9]+)/">[0-9]+-[0-9]+</a> \((Open|Future) ', line)
+    groups = re.search('<a href="/([0-9]+)/">[0-9]+-[0-9]+</a> \((Open|In Progress) ', line)
     if groups:
       commitfest_id = groups.group(1)
       state = groups.group(2)
-      if state == "Open":
-        result = commitfest_id
-        break
-      elif state == "Future":
-        result = commitfest_id
+      result = commitfest_id
   return result
 
 def read_file(path):
@@ -127,7 +124,7 @@ def write_file(path, data):
     f.write(data)
 
 def sort_and_rotate_submissions(submissions, last_submission_id):
-    submissions = sorted(submissions, key=lambda tup: tup[0])
+    submissions = sorted(submissions, key=lambda tup: int(tup[0]))
     if last_submission_id == None:
         return submissions
     done = [tup for tup in submissions if int(tup[0]) <= int(last_submission_id)]
@@ -191,7 +188,7 @@ def check_patches(commitfest_id, commit_id, n):
       # to trigger a new build
       commit_id_path = os.path.join(PATCH_DIR, commitfest_id, submission_id, "commit_id")
       if not os.path.exists(commit_id_path) or read_file(commit_id_path) != commit_id:
-        branch = "commifest/%s/%s" % (commitfest_id, submission_id)
+        branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
         subprocess.check_call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master", shell=True)
         subprocess.call("cd postgresql && git branch -q -D %s" % (branch,), shell=True) # ignore if fail
         subprocess.check_call("cd postgresql && git checkout -b %s" % (branch,), shell=True)
@@ -269,6 +266,7 @@ def write_web_page(commitfest_id):
 <head><title>Unofficial PostgreSQL Commitfest CI</title></head>
 <body>
 <h1>Unofficial Experimental PostgreSQL Commitfest CI</title></h1>
+<p>Work in progress... watch this space.</p>
 <table>
 """)
     for submission_id, apply_status, message_id, name, status in submissions:
@@ -281,16 +279,20 @@ def write_web_page(commitfest_id):
       else:
         write_file(os.path.join(commitfest_dir, "%s.apply.svg" % (submission_id,)), APPLY_PASSING_SVG)
       write_file(os.path.join(commitfest_dir, "%s.log" % submission_id), read_file(os.path.join("logs", commitfest_id, submission_id + ".log")))
+      if len(name) > 80:
+        name = name[:80] + "..."
       f.write("""
 <tr>
-  <td>%s.  <a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
   <td>[%s]</td>
+  <td>#%s</td>
+  <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
   <td><a href="https://www.postgresql.org/message-id/%s">patch set</a></td>
-""" % (submission_id, commitfest_id, submission_id, name, status, message_id))
+""" % (status, submission_id, commitfest_id, submission_id, name, message_id))
+      f.write("""<td><a href="%s/%s.log"><img src="%s/%s.apply.svg"/></a></td>\n""" % (commitfest_id, submission_id, commitfest_id, submission_id))
       if apply_status == "failing":
-        f.write("""<td><a href="%s/%s.log"><img src="%s/%s.apply.svg"/></a></td>\n""" % (commitfest_id, submission_id, commitfest_id, submission_id))
+        f.write("""<td></td>\n""")
       else:
-          f.write("""<td><a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches"><img src="https://travis-ci.org/postgresql-cfbot/postgresql.svg?branch=commitfest/%s/%s" alt="Build Status" /></a></td>\n""" % (commitfest_id, submission_id))
+        f.write("""<td><a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches"><img src="https://travis-ci.org/postgresql-cfbot/postgresql.svg?branch=commitfest/%s/%s" alt="Build Status" /></a></td>\n""" % (commitfest_id, submission_id))
       f.write("</tr>\n")
     f.write("""
 </table>
@@ -303,5 +305,5 @@ if __name__ == "__main__":
   subprocess.call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master && git pull -q", shell=True)
   commit_id = subprocess.check_output("cd postgresql && git show | head -1 | cut -d' ' -f2", shell=True).strip()
   commitfest_id = scrape_current_commitfest_id()
-  check_patches(commitfest_id, commit_id, 1)
+  check_patches(commitfest_id, commit_id, 2)
   write_web_page(commitfest_id)
