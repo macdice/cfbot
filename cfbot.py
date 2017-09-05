@@ -15,6 +15,7 @@
 #       zzz.patch
 #       ...
 
+import datetime
 import errno
 import fcntl
 import HTMLParser
@@ -67,7 +68,6 @@ class Submission:
 def slow_fetch(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
      commitfest server."""
-  print "fetching", url
   opener = urllib2.build_opener()
   opener.addheaders = [('User-Agent', USER_AGENT)]
   response = opener.open(url)
@@ -160,17 +160,19 @@ def sort_and_rotate_submissions(submissions, last_submission_id):
   rest = [s for s in submissions if s.id > last_submission_id]
   return rest + done
 
-def check_n_submissions(commit_id, commitfest_id, submissions, n):
+def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
 
   # what was the last submission ID we checked?
   last_submission_id_path = os.path.join("patches", commitfest_id, "last_submission_id")
   if os.path.exists(last_submission_id_path):
     last_submission_id = int(read_file(last_submission_id_path))
+    log.write("last submission ID was %s\n" % last_submission_id)
   else:
     last_submission_id = None
 
   # now process n submissions, starting after that one
   for submission in sort_and_rotate_submissions(submissions, last_submission_id):
+    log.write("==> considering submission ID %s\n" % submission.id)
     patch_dir = os.path.join("patches", commitfest_id, str(submission.id))
     if os.path.isdir(patch_dir):
       # write name and status to disk so our web page builder can use them...
@@ -187,6 +189,7 @@ def check_n_submissions(commit_id, commitfest_id, submissions, n):
       # download the patches, if we don't already have them
       message_id_path = os.path.join(patch_dir, "message_id")
       if not os.path.exists(message_id_path) or read_file(message_id_path) != message_id:
+        log.write("    message ID %s is new\n" % message_id)
         tmp = patch_dir + ".tmp"
         if os.path.exists(tmp):
           shutil.rmtree(tmp)
@@ -197,9 +200,9 @@ def check_n_submissions(commit_id, commitfest_id, submissions, n):
           parsed = urlparse.urlparse(patch)
           filename = os.path.basename(parsed.path)
           dest = os.path.join(tmp, filename)
-          print "fetching patch", patch
+          log.write("    fetching patch %s\n" % patch)
           urllib.urlretrieve(patch, dest)
-          time.sleep(1)
+          time.sleep(SLOW_FETCH_SLEEP)
         write_file(os.path.join(tmp, "message_id"), message_id)
         write_file(os.path.join(tmp, "status"), submission.status)
         write_file(os.path.join(tmp, "name"), submission.name)
@@ -210,25 +213,26 @@ def check_n_submissions(commit_id, commitfest_id, submissions, n):
       # to trigger a new build
       commit_id_path = os.path.join("patches", commitfest_id, str(submission.id), "commit_id")
       if not os.path.exists(commit_id_path) or read_file(commit_id_path) != commit_id:
+        log.write("    commit ID %s is new\n" % commit_id)
         branch = "commitfest/%s/%s" % (commitfest_id, submission.id)
         subprocess.check_call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master", shell=True)
         failed_to_apply = False
-        with open(os.path.join("logs", commitfest_id, str(submission.id) + ".log"), "w") as log:
-          log.write("== Fetched patches from message ID %s\n" % message_id)
-          log.write("== Applying on top of commit %s\n" % commit_id)
+        with open(os.path.join("logs", commitfest_id, str(submission.id) + ".log"), "w") as apply_log:
+          apply_log.write("== Fetched patches from message ID %s\n" % message_id)
+          apply_log.write("== Applying on top of commit %s\n" % commit_id)
           for path in sorted(os.listdir(patch_dir)):
             if path.endswith(".patch"):
-              print path
               with open(os.path.join(patch_dir, path), "r") as f:
-                log.write("== Applying patch %s...\n" % path)
-                log.flush()
-                popen = subprocess.Popen("cd postgresql && patch -p1 --batch --silent", shell=True, stdin=f, stdout=log, stderr=log)
+                apply_log.write("== Applying patch %s...\n" % path)
+                apply_log.flush()
+                popen = subprocess.Popen("cd postgresql && patch -p1 --batch --silent", shell=True, stdin=f, stdout=apply_log, stderr=apply_log)
                 popen.wait()
                 if popen.returncode != 0:
                   failed_to_apply = True
                   break
         apply_status_path = os.path.join("patches", commitfest_id, str(submission.id), "apply_status")
         if failed_to_apply:
+          log.write("    apply failed (see apply log for details)\n")
           write_file(apply_status_path, "failing")
         else:
           write_file(apply_status_path, "passing")
@@ -236,6 +240,7 @@ def check_n_submissions(commit_id, commitfest_id, submissions, n):
           subprocess.call("cd postgresql && git branch -q -D %s > /dev/null 2> /dev/null" % (branch,), shell=True) # ignore if fail
           subprocess.check_call("cd postgresql && git checkout -q -b %s" % (branch,), shell=True)
           subprocess.check_call("cd postgresql && git add -A", shell=True)
+          log.write("    creating new branch %s\n" % branch)
           write_file("commit_message", """Automatic commit for Commitfest submission #%s.
 
 This commit was automatically generated and includes a Travis control file
@@ -248,6 +253,7 @@ Patches fetched from: https://www.postgresql.org/message-id/%s
           subprocess.check_call("cd postgresql && git commit -q -F ../commit_message", shell=True)
           write_file(commit_id_path, commit_id)
           if CFBOT_REPO_PUSH:
+            log.write("pushing branch %s\n" % branch)
             os.environ["GIT_SSH_COMMAND"] = CFBOT_REPO_SSH_COMMAND
             subprocess.check_call("cd postgresql && git push -q -f cfbot-repo %s" % (branch,), shell=True)
           n = n - 1
@@ -279,7 +285,6 @@ def build_web_page(commitfest_id, submissions):
 <table>
 """)
     for submission in sorted(submissions, key=sort_status_name):
-
       # load the info about this submission that was recorded last time
       # we actually rebuilt the branch
       # TODO:that means the sorting is wrong for recently changed names and statuses...
@@ -295,7 +300,7 @@ def build_web_page(commitfest_id, submissions):
       name = read_file(name_path)
       status = read_file(status_path)
 
-        # create an apply pass/fail badge
+      # create an apply pass/fail badge
       commitfest_dir = os.path.join("www", commitfest_id)
       if not os.path.exists(commitfest_dir):
         os.mkdir(commitfest_dir)
@@ -376,7 +381,12 @@ def run(num_to_check):
   prepare_filesystem(commitfest_id)
   submissions = get_submissions_for_commitfest(commitfest_id)
   submissions = filter(lambda s: s.status in ("Ready for Committer", "Needs review"), submissions)
-  check_n_submissions(commit_id, commitfest_id, submissions, num_to_check)
+  with open("logs/cfbot.%s.log" % datetime.date.today().isoformat(), "a") as log:
+    log.write("== starting at %s\n" % str(datetime.datetime.now()))
+    log.write("commitfest = %s\n" % commitfest_id)
+    log.write("commit = %s\n" % commit_id)
+    check_n_submissions(log, commit_id, commitfest_id, submissions, num_to_check)
+    log.write("== finishing at %s\n" % str(datetime.datetime.now()))
   build_web_page(commitfest_id, submissions)
   lock.close()
 
