@@ -49,7 +49,8 @@ cache: ccache
 before_install:
  - "sudo apt-get update"
  - "sudo apt-get install libipc-run-perl libperl-dev libpython-dev tcl-dev libldap2-dev libicu-dev"
-script: ./configure --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make && make check-world
+ - "sudo apt-get install docbook docbook-dsssl docbook-xsl libxml2-utils openjade1.3 opensp xsltproc"
+script: ./configure --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make && make check-world && (cd doc && make)
 """
 
 # images used for "apply" badges
