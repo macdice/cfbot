@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import shutil
+import tarfile
 import time
 import urllib
 import urllib2
@@ -86,7 +87,7 @@ def get_latest_patches_from_thread_url(thread_url):
   message_attachments = []
   message_id = None
   for line in slow_fetch(thread_url).splitlines():
-    groups = re.search('<a href="(/message-id/attachment/[^"]*.patch)">', line)
+    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(patch|tar\\.gz|tgz))">', line)
     if groups:
       message_attachments.append("https://www.postgresql.org" + groups.group(1))
       selected_message_attachments = message_attachments
@@ -96,6 +97,18 @@ def get_latest_patches_from_thread_url(thread_url):
       if groups:
         message_id = groups.group(1)
         message_attachments = []
+  # if there is a tarball attachment, there must be only one attachment,
+  # otherwise give up on this thread (we don't know how to combine patches and
+  # tarballs)
+  if selected_message_attachments != None:
+    if any(x.endswith(".tgz") or x.endswith(".tar.gz") for x in selected_message_attachments):
+      if len(selected_message_attachments) > 1:
+        selected_message_id = None
+        selected_message_attachments = None
+  # if there are multiple patch files, they had better follow the convention
+  # of leading numbers, otherwise we don't know how to apply them in the right
+  # order
+  # TODO
   return selected_message_id, selected_message_attachments
 
 def get_thread_url_for_submission(commitfest_id, submission_id):
@@ -168,12 +181,14 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
   if os.path.exists(last_submission_id_path):
     last_submission_id = int(read_file(last_submission_id_path))
     log.write("last submission ID was %s\n" % last_submission_id)
+    log.flush()
   else:
     last_submission_id = None
 
   # now process n submissions, starting after that one
   for submission in sort_and_rotate_submissions(submissions, last_submission_id):
     log.write("==> considering submission ID %s\n" % submission.id)
+    log.flush()
     patch_dir = os.path.join("patches", commitfest_id, str(submission.id))
     if os.path.isdir(patch_dir):
       # write name and status to disk so our web page builder can use them...
@@ -191,6 +206,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
       message_id_path = os.path.join(patch_dir, "message_id")
       if not os.path.exists(message_id_path) or read_file(message_id_path) != message_id:
         log.write("    message ID %s is new\n" % message_id)
+        log.flush()
         tmp = patch_dir + ".tmp"
         if os.path.exists(tmp):
           shutil.rmtree(tmp)
@@ -202,6 +218,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
           filename = os.path.basename(parsed.path)
           dest = os.path.join(tmp, filename)
           log.write("    fetching patch %s\n" % patch)
+          log.flush()
           urllib.urlretrieve(patch, dest)
           time.sleep(SLOW_FETCH_SLEEP)
         write_file(os.path.join(tmp, "message_id"), message_id)
@@ -215,6 +232,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
       commit_id_path = os.path.join("patches", commitfest_id, str(submission.id), "commit_id")
       if not os.path.exists(commit_id_path) or read_file(commit_id_path) != commit_id:
         log.write("    commit ID %s is new\n" % commit_id)
+        log.flush()
         branch = "commitfest/%s/%s" % (commitfest_id, submission.id)
         subprocess.check_call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master", shell=True)
         failed_to_apply = False
@@ -231,9 +249,28 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
                 if popen.returncode != 0:
                   failed_to_apply = True
                   break
+            elif path.endswith(".tgz") or path.endswith(".tar.gz"):
+              apply_log.write("== Applying patches from tarball %s...\n" % path)
+              apply_log.flush()
+              # TODO catch errors manipulating tar files...
+              with tarfile.open(os.path.join(patch_dir, path), "r") as tarball:
+                for name in sorted(tarball.getnames()):
+                  if not name.endswith(".patch"):
+                    continue
+                  apply_log.write("== Applying patch %s...\n" % name)
+                  apply_log.flush()
+                  popen = subprocess.Popen("cd postgresql && patch -p1 --batch --silent", shell=True, stdin=subprocess.PIPE, stdout=apply_log, stderr=apply_log)
+                  f = tarball.extractfile(name)
+                  popen.communicate(input=f.read())
+                  f.close()
+                  popen.wait()
+                  if popen.returncode != 0:
+                    failed_to_apply = True
+                    break
         apply_status_path = os.path.join("patches", commitfest_id, str(submission.id), "apply_status")
         if failed_to_apply:
           log.write("    apply failed (see apply log for details)\n")
+          log.flush()
           write_file(apply_status_path, "failing")
           # no point in trying again until either the message ID or the commit ID moves
           write_file(commit_id_path, commit_id)
@@ -391,8 +428,10 @@ def run():
     log.write("== starting at %s\n" % str(datetime.datetime.now()))
     log.write("commitfest = %s\n" % commitfest_id)
     log.write("commit = %s\n" % commit_id)
+    log.flush()
     check_n_submissions(log, commit_id, commitfest_id, submissions, MAX_BRANCHES_TO_PUSH)
     log.write("== finishing at %s\n" % str(datetime.datetime.now()))
+    log.flush()
   build_web_page(commitfest_id, submissions)
   lock.close()
 
