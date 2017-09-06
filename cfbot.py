@@ -352,6 +352,7 @@ thomas.munro-at-enterprisedb.com.</p>
       commitfest_dir = os.path.join("www", commitfest_id)
       if not os.path.exists(commitfest_dir):
         os.mkdir(commitfest_dir)
+      # write an image file for each submission, so that the badge could be included on other websites
       if apply_status == "failing":
         write_file(os.path.join(commitfest_dir, "%s.apply.svg" % (submission.id,)), APPLY_FAILING_SVG)
       else:
@@ -366,7 +367,8 @@ thomas.munro-at-enterprisedb.com.</p>
   <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
   <td><a href="https://www.postgresql.org/message-id/%s">patch set</a></td>
 """ % (status, submission.id, commitfest_id, submission.id, name, message_id))
-      f.write("""<td><a href="%s/%s.log"><img src="%s/%s.apply.svg"/></a></td>\n""" % (commitfest_id, submission.id, commitfest_id, submission.id))
+      #f.write("""<td><a href="%s/%s.log"><img src="%s/%s.apply.svg"/></a></td>\n""" % (commitfest_id, submission.id, commitfest_id, submission.id))
+      f.write("""<td><a href="%s/%s.log"><img src="apply-%s.svg"/></a></td>\n""" % (commitfest_id, submission.id, apply_status))
       if apply_status == "failing":
         f.write("""<td></td>\n""")
       else:
@@ -392,7 +394,10 @@ def prepare_filesystem(commitfest_id):
      they aren't already present."""
   # set up the other directories we need
   if not os.path.exists("www"):
-    os.mkdir("www")
+    os.mkdir("www.tmp")
+    write_file(os.path.join("www.tmp", "apply-failing.svg"), APPLY_FAILING_SVG)
+    write_file(os.path.join("www.tmp", "apply-passing.svg"), APPLY_PASSING_SVG)
+    os.rename("www.tmp", "www")
   if not os.path.exists("logs"):
     os.mkdir("logs")
   if not os.path.exists(os.path.join("logs", commitfest_id)):
