@@ -284,6 +284,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
           subprocess.check_call("cd postgresql && git checkout -q -b %s" % (branch,), shell=True)
           subprocess.check_call("cd postgresql && git add -A", shell=True)
           log.write("    creating new branch %s\n" % branch)
+          log.flush()
           write_file("commit_message", """Automatic commit for Commitfest submission #%s.
 
 This commit was automatically generated and includes a Travis control file
@@ -296,7 +297,8 @@ Patches fetched from: https://www.postgresql.org/message-id/%s
           subprocess.check_call("cd postgresql && git commit -q -F ../commit_message", shell=True)
           write_file(commit_id_path, commit_id)
           if n > 0:
-            log.write("pushing branch %s\n" % branch)
+            log.write("    pushing branch %s\n" % branch)
+            log.flush()
             os.environ["GIT_SSH_COMMAND"] = CFBOT_REPO_SSH_COMMAND
             subprocess.check_call("cd postgresql && git push -q -f cfbot-repo %s" % (branch,), shell=True)
           n = n - 1
