@@ -441,5 +441,5 @@ def run(num_branches_to_push):
 if __name__ == "__main__":
   num_branches_to_push = 0
   if len(sys.argv) > 1:
-    num_branches_to_push = int(argv[1])
+    num_branches_to_push = int(sys.argv[1])
   run(num_branches_to_push)
