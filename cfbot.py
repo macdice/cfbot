@@ -1,19 +1,4 @@
 #!/usr/bin/env python
-#
-# Fetch the latest Commitfest patches.  The resulting tree of files looks like
-# this:
-#
-# "patches"
-#   14               = commitfest ID
-#     1234           = commitfest submission ID
-#       name         = commitfest submission name
-#       status       = commitfest status ("Ready for Committer" etc)
-#       message_id   = patch message ID
-#       commit_id    = commit ID of last branch we created for this submission
-#       xxx.patch
-#       yyy.patch
-#       zzz.patch
-#       ...
 
 import datetime
 import errno
