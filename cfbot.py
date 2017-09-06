@@ -46,7 +46,10 @@ CFBOT_REPO_SSH_COMMAND="ssh -i ~/.ssh/cfbot_github_rsa"
 TRAVIS_FILE = """
 language: c
 cache: ccache
-script: ./configure && make && make check && (cd src/test/isolation && make check)
+before_install:
+ - "sudo apt-get update"
+ - "sudo apt-get install libipc-run-perl libperl-dev libpython-dev tcl-dev libldap2-dev libicu-dev"
+script: ./configure --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make && make check-world
 """
 
 # images used for "apply" badges
