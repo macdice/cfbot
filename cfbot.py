@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import shutil
+import sys
 import tarfile
 import time
 import urllib
@@ -32,13 +33,11 @@ import urlparse
 # politeness settings
 SLOW_FETCH_SLEEP = 1.0
 USER_AGENT = "Personal Commitfest crawler of Thomas Munro <munro@ip9.org>"
-MAX_BRANCHES_TO_PUSH = 2
 
 # where to pull PostgreSQL master branch from
 PG_REPO="git://git.postgresql.org/git/postgresql.git"
 
 # where to push automatically generated branches (if enabled)
-CFBOT_REPO_PUSH = False
 CFBOT_REPO="git@github.com:postgresql-cfbot/postgresql.git"
 CFBOT_REPO_SSH_COMMAND="ssh -i ~/.ssh/cfbot_github_rsa"
 
@@ -296,7 +295,7 @@ Patches fetched from: https://www.postgresql.org/message-id/%s
 """ % (submission.id, commitfest_id, submission.id, message_id))
           subprocess.check_call("cd postgresql && git commit -q -F ../commit_message", shell=True)
           write_file(commit_id_path, commit_id)
-          if CFBOT_REPO_PUSH:
+          if n > 0:
             log.write("pushing branch %s\n" % branch)
             os.environ["GIT_SSH_COMMAND"] = CFBOT_REPO_SSH_COMMAND
             subprocess.check_call("cd postgresql && git push -q -f cfbot-repo %s" % (branch,), shell=True)
@@ -416,7 +415,7 @@ def try_lock():
     else:
       return None
 
-def run():
+def run(num_branches_to_push):
   lock = try_lock()
   if not lock:
     # another copy is already running in this directory, so exit quietly (for
@@ -433,11 +432,14 @@ def run():
     log.write("commitfest = %s\n" % commitfest_id)
     log.write("commit = %s\n" % commit_id)
     log.flush()
-    check_n_submissions(log, commit_id, commitfest_id, submissions, MAX_BRANCHES_TO_PUSH)
+    check_n_submissions(log, commit_id, commitfest_id, submissions, num_branches_to_push)
     log.write("== finishing at %s\n" % str(datetime.datetime.now()))
     log.flush()
   build_web_page(commitfest_id, submissions)
   lock.close()
 
 if __name__ == "__main__":
-  run()
+  num_branches_to_push = 0
+  if len(sys.argv) > 1:
+    num_branches_to_push = int(argv[1])
+  run(num_branches_to_push)
