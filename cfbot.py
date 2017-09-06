@@ -17,7 +17,7 @@ import urlparse
 
 # politeness settings
 SLOW_FETCH_SLEEP = 1.0
-USER_AGENT = "Personal Commitfest crawler of Thomas Munro <munro@ip9.org>"
+USER_AGENT = "cfbot from http://commitfest.cputube.org"
 
 # where to pull PostgreSQL master branch from
 PG_REPO="git://git.postgresql.org/git/postgresql.git"
@@ -308,12 +308,30 @@ def build_web_page(commitfest_id, submissions):
   with open("www/index.html.tmp", "w") as f:
     f.write("""
 <html>
-<head><title>Unofficial PostgreSQL Commitfest CI</title></head>
+<head><title>Skunkworks PostgreSQL Patch Testing Bot</title></head>
 <body>
-<h1>Unofficial Experimental PostgreSQL Commitfest CI</title></h1>
-<p>Work in progress... watch this space.</p>
+<h1>Skunkworks PostgreSQL Patch Testing Bot</h1>
+<p>
+This is an experiment to see if we can use modern continuous integration tools
+while keeping our existing mailing-list based workflow.  It slurps patches out
+of the current <a href="https://commitfest.postgresql.org/%s">PostgreSQL
+Commitfest</a> and pushes them into
+<a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
+along with instructions to trigger builds on the
+<a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis
+CI</a> build farm, and collates results here.  What could possibly go wrong?
+Thanks to the generosity of those two companies who provide great free
+infrastructure to open source projects.
+</p>
+
+<p>Current problems: Results sometimes lag by quite a few hours (can only
+build a couple at a time).  Currently can't see regression.diffs.  Can't
+locate some patches because archives website cuts off long thread.  Confused
+by CF entries with multiple associated threads.  Please send feedback to
+thomas.munro-at-enterprisedb.com.</p>
+
 <table>
-""")
+""" % (commitfest_id,))
     for submission in sorted(submissions, key=sort_status_name):
       # load the info about this submission that was recorded last time
       # we actually rebuilt the branch
