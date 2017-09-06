@@ -320,8 +320,8 @@ Commitfest</a> and pushes them into
 along with instructions to trigger builds on the
 <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis
 CI</a> build farm, and collates results here.  What could possibly go wrong?
-Thanks to the generosity of those two companies who provide great free
-infrastructure to open source projects.
+(Thanks to those two companies who provide great free infrastructure to open
+source projects!)
 </p>
 
 <p>Current problems: Results sometimes lag by quite a few hours (can only
