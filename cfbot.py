@@ -312,7 +312,7 @@ def build_web_page(commitfest_id, submissions):
 <body>
 <h1>Experimental PostgreSQL Patch Testing Bot</h1>
 <p>
-The idea:
+A simple plan:
 <a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
 &rarr; 
 <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
