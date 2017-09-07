@@ -311,7 +311,7 @@ def build_web_page(commitfest_id, submissions):
     f.write("""
 <html>
   <head>
-    <title>Automated PostgreSQL Patch Tester</title>
+    <title>PostgreSQL Patch Tester</title>
     <style type="text/css">
       body {
         margin: 1rem auto;
@@ -334,7 +334,7 @@ def build_web_page(commitfest_id, submissions):
     </style>
   </head>
   <body>
-    <h1>Automated PostgreSQL Patch Tester</h1>
+    <h1>PostgreSQL Patch Tester</h1>
     <p>
       Here lives a bot that does this:
       <a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
