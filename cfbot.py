@@ -105,14 +105,13 @@ def get_latest_patches_from_thread_url(thread_url):
 def get_thread_url_for_submission(commitfest_id, submission_id):
   """Given a commitfest ID and a submission ID, return the URL of the 'whole
      thread' page in the mailing list archives."""
-  # TODO: if there is more than one, how to choose?
+  # if there is more than one, we'll take the furthest down on the page...
   result = None
   url = "https://commitfest.postgresql.org/%s/%s/" % (commitfest_id, submission_id)
   for line in slow_fetch(url).splitlines():
     groups = re.search('(https://www.postgresql.org/message-id/flat/[^"]+)', line)
     if groups:
       result = groups.group(1)
-      break
   return result
   
 def get_submissions_for_commitfest(commitfest_id):
