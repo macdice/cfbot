@@ -308,28 +308,17 @@ def build_web_page(commitfest_id, submissions):
   with open("www/index.html.tmp", "w") as f:
     f.write("""
 <html>
-<head><title>Skunkworks PostgreSQL Patch Testing Bot</title></head>
+<head><title>Experimental PostgreSQL Patch Testing Bot</title></head>
 <body>
-<h1>Skunkworks PostgreSQL Patch Testing Bot</h1>
+<h1>Experimental PostgreSQL Patch Testing Bot</h1>
 <p>
-This is an experiment to see if we can use modern continuous integration tools
-while keeping our existing mailing-list based workflow.  It slurps patches out
-of the current <a href="https://commitfest.postgresql.org/%s">PostgreSQL
-Commitfest</a> and pushes them into
+The idea:
+<a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
+&rarr; 
 <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
-along with instructions to trigger builds on the
-<a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis
-CI</a> build farm, and collates results here.  What could possibly go wrong?
-(Thanks to those two companies who provide great free infrastructure to open
-source projects!)
+&rarr;
+<a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>
 </p>
-
-<p>Current problems: Results sometimes lag by quite a few hours (can only
-build a couple at a time).  Currently can't see regression.diffs.  Can't
-locate some patches because archives website cuts off long thread.  Confused
-by CF entries with multiple associated threads.  Please send feedback to
-thomas.munro-at-enterprisedb.com.</p>
-
 <table>
 """ % (commitfest_id,))
     for submission in sorted(submissions, key=sort_status_name):
@@ -375,6 +364,8 @@ thomas.munro-at-enterprisedb.com.</p>
       f.write("</tr>\n")
     f.write("""
 </table>
+
+<p>Please send feedback to thomas.munro-at-enterprisedb.com.</p>
 </body>
 </html>
 """)
