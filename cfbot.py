@@ -109,7 +109,7 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
   result = None
   url = "https://commitfest.postgresql.org/%s/%s/" % (commitfest_id, submission_id)
   for line in slow_fetch(url).splitlines():
-    groups = re.search('(https://www.postgresql.org/message-id/flat/[^"]+)', line)
+    groups = re.search('<dt><a href="(https://www.postgresql.org/message-id/flat/[^"]+)"', line)
     if groups:
       result = groups.group(1)
   return result
