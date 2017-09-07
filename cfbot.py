@@ -312,21 +312,23 @@ def build_web_page(commitfest_id, submissions):
 <html>
   <head>
     <title>Automated PostgreSQL Patch Tester</title>
-    <!-- if you know how to make this more beautiful, please email me (see below) -->
     <style type="text/css">
       body {
-      	font-family: verdana,arial,sans-serif;
-        margin: 50px;
+        margin: 1rem;
+        font-family: -apple-system,BlinkMacSystemFont,avenir next,avenir,helvetica neue,helvetica,ubuntu,roboto,noto,segoe ui,arial,sans-serif;
+        color: #444;
+      }
+      h1 {
+        font-size: 3rem;
       }
       table {
-      	font-size:11px;
         border-collapse: collapse;
-      }
-      tr:nth-child(odd) {
-        background-color: #f2f2f2;
+      	font-size: 0.875rem;
+        width: 100%%;
       }
       td {
-        padding: 6px;
+        padding: 1rem 1rem 1rem 0;
+        border-bottom: solid 1px rgba(0,0,0,.2);
       }
     </style>
   </head>
