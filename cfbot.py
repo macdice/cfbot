@@ -310,18 +310,37 @@ def build_web_page(commitfest_id, submissions):
   with open("www/index.html.tmp", "w") as f:
     f.write("""
 <html>
-<head><title>Experimental PostgreSQL Patch Testing Bot</title></head>
-<body>
-<h1>Experimental PostgreSQL Patch Testing Bot</h1>
-<p>
-A simple plan:
-<a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
-&rarr; 
-<a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
-&rarr;
-<a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>
-</p>
-<table>
+  <head>
+    <title>Automated PostgreSQL Patch Tester</title>
+    <!-- if you know how to make this more beautiful, please email me (see below) -->
+    <style type="text/css">
+      body {
+      	font-family: verdana,arial,sans-serif;
+        margin: 50px;
+      }
+      table {
+      	font-size:11px;
+        border-collapse: collapse;
+      }
+      tr:nth-child(odd) {
+        background-color: #f2f2f2;
+      }
+      td {
+        padding: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Automated PostgreSQL Patch Tester</h1>
+    <p>
+      Here lives a bot that does this:
+      <a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
+      &rarr; 
+      <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
+      &rarr;
+      <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>.
+    </p>
+    <table>
 """ % (commitfest_id,))
     for submission in sorted(submissions, key=sort_status_name):
       # load the info about this submission that was recorded last time
@@ -351,24 +370,25 @@ A simple plan:
       if len(name) > 80:
         name = name[:80] + "..."
       f.write("""
-<tr>
-  <td>[%s]</td>
-  <td>#%s</td>
-  <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
-  <td><a href="https://www.postgresql.org/message-id/%s">patch set</a></td>
+      <tr>
+        <td>%s</td>
+        <td>#%s</td>
+        <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
+        <td><a href="https://www.postgresql.org/message-id/%s">patch(es)</a></td>
 """ % (status, submission.id, commitfest_id, submission.id, name, message_id))
-      #f.write("""<td><a href="%s/%s.log"><img src="%s/%s.apply.svg"/></a></td>\n""" % (commitfest_id, submission.id, commitfest_id, submission.id))
-      f.write("""<td><a href="%s/%s.log"><img src="apply-%s.svg"/></a></td>\n""" % (commitfest_id, submission.id, apply_status))
       if apply_status == "failing":
-        f.write("""<td></td>\n""")
+        f.write("""        <td><a href="%s/%s.log"><img src="apply-failing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
+        f.write("""        <td></td>\n""")
       else:
-        f.write("""<td><a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches"><img src="https://travis-ci.org/postgresql-cfbot/postgresql.svg?branch=commitfest/%s/%s" alt="Build Status" /></a></td>\n""" % (commitfest_id, submission.id))
-      f.write("</tr>\n")
+        f.write("""        <td><a href="%s/%s.log"><img src="apply-passing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
+        #f.write("""        <td><a href="https://github.com/postgresql-cfbot/postgresql/tree/commitfest/%s/%s"><img src="apply-passing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
+        f.write("""        <td><a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches"><img src="https://travis-ci.org/postgresql-cfbot/postgresql.svg?branch=commitfest/%s/%s" alt="Build Status" /></a></td>\n""" % (commitfest_id, submission.id))
+      f.write("      </tr>\n")
     f.write("""
-</table>
+    </table>
 
-<p>Please send feedback to thomas.munro-at-enterprisedb.com.</p>
-</body>
+    <p>Please send feedback to thomas.munro-at-enterprisedb.com.</p>
+  </body>
 </html>
 """)
   os.rename("www/index.html.tmp", "www/index.html")
