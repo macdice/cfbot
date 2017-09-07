@@ -314,9 +314,10 @@ def build_web_page(commitfest_id, submissions):
     <title>Automated PostgreSQL Patch Tester</title>
     <style type="text/css">
       body {
-        margin: 1rem;
+        margin: 1rem auto;
         font-family: -apple-system,BlinkMacSystemFont,avenir next,avenir,helvetica neue,helvetica,ubuntu,roboto,noto,segoe ui,arial,sans-serif;
         color: #444;
+        max-width: 920px;
       }
       h1 {
         font-size: 3rem;
