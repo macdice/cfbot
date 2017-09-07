@@ -335,7 +335,6 @@ thomas.munro-at-enterprisedb.com.</p>
     for submission in sorted(submissions, key=sort_status_name):
       # load the info about this submission that was recorded last time
       # we actually rebuilt the branch
-      # TODO:that means the sorting is wrong for recently changed names and statuses...
       submission_dir = os.path.join("patches", commitfest_id, str(submission.id))
       apply_status_path = os.path.join(submission_dir, "apply_status")
       message_id_path = os.path.join(submission_dir, "message_id")
@@ -345,8 +344,8 @@ thomas.munro-at-enterprisedb.com.</p>
         continue
       apply_status = read_file(apply_status_path)
       message_id = read_file(message_id_path)
-      name = read_file(name_path)
-      status = read_file(status_path)
+      name = submission.name #read_file(name_path)
+      status = submission.status #read_file(status_path)
 
       # create an apply pass/fail badge
       commitfest_dir = os.path.join("www", commitfest_id)
