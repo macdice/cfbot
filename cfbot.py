@@ -336,7 +336,7 @@ def build_web_page(commitfest_id, submissions):
   <body>
     <h1>PostgreSQL Patch Tester</h1>
     <p>
-      Here lives a bot that does this:
+      Here lives an experimental bot that does this:
       <a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
       &rarr; 
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
