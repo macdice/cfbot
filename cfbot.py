@@ -51,12 +51,11 @@ APPLY_FAILING_SVG = """
 class Submission:
   """A submission in a Commitfest."""
 
-  def __init__(self, submission_id, name, status):
+  def __init__(self, submission_id, name, status, authors):
     self.id = int(submission_id)
     self.name = name
     self.status = status
-    self.message_id = None
-    self.apply_status = None
+    self.authors = authors
 
 def slow_fetch(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
@@ -119,15 +118,27 @@ def get_submissions_for_commitfest(commitfest_id):
   result = []
   parser = HTMLParser.HTMLParser()
   url = "https://commitfest.postgresql.org/%s/" % (commitfest_id,)
+  next_line_has_authors = False
+  state = None
   for line in slow_fetch(url).splitlines():
     groups = re.search('\<a href="([0-9]+)/"\>([^<]+)</a>', line)
     if groups:
       submission_id = groups.group(1)
       name = parser.unescape(groups.group(2))
+    if next_line_has_authors:
+      next_line_has_authors = False
+      groups = re.search("<td>([^<]*)</td>", line)
+      if groups:
+        authors = groups.group(1)
+        authors = re.sub(" *\\([^)]*\\)", "", authors)
+        result.append(Submission(submission_id, name, state, authors))
+        continue
     groups = re.search('<td><span class="label label-[^"]*">([^<]+)</span></td>', line)
     if groups:
       state = groups.group(1)
-      result.append(Submission(submission_id, name, state))
+      next_line_has_authors = True
+      continue
+    next_line_has_authors = False
   return result
 
 def get_current_commitfest_id():
@@ -297,15 +308,18 @@ Patches fetched from: https://www.postgresql.org/message-id/%s
         break
 
 def sort_status_name(submission):
-  """An ordering function that puts "Ready for Committer" first."""
+  """An ordering function that puts statuses in order of most interest..."""
   if submission.status == "Ready for Committer":
     return "0" + submission.name.lower()
-  else:
+  elif submission.status == "Needs review":
     return "1" + submission.name.lower()
+  else:
+    return "2" + submission.name.lower()
 
 def build_web_page(commitfest_id, submissions):
   """Build a web page that lists all known entries and shows the badges."""
 
+  last_status = None
   submissions = sorted(submissions, key=sort_status_name)
   with open("www/index.html.tmp", "w") as f:
     f.write("""
@@ -321,6 +335,9 @@ def build_web_page(commitfest_id, submissions):
       }
       h1 {
         font-size: 3rem;
+      }
+      h2 {
+        font-size: 2rem;
       }
       table {
         border-collapse: collapse;
@@ -360,6 +377,11 @@ def build_web_page(commitfest_id, submissions):
       name = submission.name #read_file(name_path)
       status = submission.status #read_file(status_path)
 
+      # create a new heading row if this is a new CF status
+      if last_status == None or last_status != status:
+        f.write("""      <tr><td colspan="6"><h2>%s</h2></td></tr>\n""" % status)
+        last_status = status
+
       # create an apply pass/fail badge
       commitfest_dir = os.path.join("www", commitfest_id)
       if not os.path.exists(commitfest_dir):
@@ -374,11 +396,11 @@ def build_web_page(commitfest_id, submissions):
         name = name[:80] + "..."
       f.write("""
       <tr>
-        <td>%s</td>
         <td>#%s</td>
         <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
+        <td>%s</td>
         <td><a href="https://www.postgresql.org/message-id/%s">patch(es)</a></td>
-""" % (status, submission.id, commitfest_id, submission.id, name, message_id))
+""" % (submission.id, commitfest_id, submission.id, name, submission.authors, message_id))
       if apply_status == "failing":
         f.write("""        <td><a href="%s/%s.log"><img src="apply-failing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
         f.write("""        <td></td>\n""")
@@ -451,7 +473,7 @@ def run(num_branches_to_push):
   commitfest_id = get_current_commitfest_id()
   prepare_filesystem(commitfest_id)
   submissions = get_submissions_for_commitfest(commitfest_id)
-  submissions = filter(lambda s: s.status in ("Ready for Committer", "Needs review"), submissions)
+  submissions = filter(lambda s: s.status in ("Ready for Committer", "Needs review", "Waiting on Author"), submissions)
   with open("logs/cfbot.%s.log" % datetime.date.today().isoformat(), "a") as log:
     log.write("== starting at %s\n" % str(datetime.datetime.now()))
     log.write("commitfest = %s\n" % commitfest_id)
