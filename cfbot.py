@@ -11,6 +11,7 @@ import shutil
 import sys
 import tarfile
 import time
+import unicodedata
 import urllib
 import urllib2
 import urlparse
@@ -316,12 +317,31 @@ def sort_status_name(submission):
   else:
     return "2" + submission.name.lower()
 
-def build_web_page(commitfest_id, submissions):
+def make_author_url(author):
+    text = author.strip()
+    text = unicode(text, "utf-8")
+    text = unicodedata.normalize('NFD', text)
+    text = text.encode('ascii', 'ignore')
+    text = text.decode("utf-8")
+    text = str(text).lower()
+    text = re.sub('[ ]+', '-', text)
+    text = re.sub('[^0-9a-zA-Z_-]', '', text)
+    return text + ".html"
+
+def all_authors(submission):
+  results = []
+  for author in submission.authors.split(","):
+    author = author.strip()
+    if author != "":
+      results.append(author)
+  return results
+ 
+def build_web_page(commitfest_id, submissions, filter_author):
   """Build a web page that lists all known entries and shows the badges."""
 
   last_status = None
   submissions = sorted(submissions, key=sort_status_name)
-  with open("www/index.html.tmp", "w") as f:
+  with open("www/html.tmp", "w") as f:
     f.write("""
 <html>
   <head>
@@ -364,6 +384,11 @@ def build_web_page(commitfest_id, submissions):
     <table>
 """ % (commitfest_id,))
     for submission in sorted(submissions, key=sort_status_name):
+
+      # skip if we need to filter this one out
+      if filter_author != None and filter_author not in all_authors(submission):
+        continue
+
       # load the info about this submission that was recorded last time
       # we actually rebuilt the branch
       submission_dir = os.path.join("patches", commitfest_id, str(submission.id))
@@ -395,13 +420,19 @@ def build_web_page(commitfest_id, submissions):
       write_file(os.path.join(commitfest_dir, "%s.log" % submission.id), read_file(os.path.join("logs", commitfest_id, str(submission.id) + ".log")))
       if len(name) > 80:
         name = name[:80] + "..."
+      # convert list of authors into links
+      author_links = []
+      for author in all_authors(submission):
+        author_links.append("""<a href="%s">%s</a>""" % (make_author_url(author), author))
+      author_links_string = ", ".join(author_links)
+      # write out an entry
       f.write("""
       <tr>
         <td>#%s</td>
         <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
         <td>%s</td>
-        <td><a href="https://www.postgresql.org/message-id/%s">patch(es)</a></td>
-""" % (submission.id, commitfest_id, submission.id, name, submission.authors, message_id))
+        <td><a href="https://www.postgresql.org/message-id/%s">patch</a></td>
+""" % (submission.id, commitfest_id, submission.id, name, author_links_string, message_id))
       if apply_status == "failing":
         f.write("""        <td><a href="%s/%s.log"><img src="apply-failing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
         f.write("""        <td></td>\n""")
@@ -417,7 +448,10 @@ def build_web_page(commitfest_id, submissions):
   </body>
 </html>
 """)
-  os.rename("www/index.html.tmp", "www/index.html")
+  if filter_author == None:
+    os.rename("www/html.tmp", "www/index.html")
+  else:
+    os.rename("www/html.tmp", "www/%s" % make_author_url(filter_author))
 
 def prepare_repo():
   # set up a repo if we don't already have one
@@ -463,6 +497,12 @@ def try_lock():
     else:
       return None
 
+def unique_authors(submissions):
+  results = []
+  for submission in submissions:
+    results += all_authors(submission)
+  return list(set(results))
+
 def run(num_branches_to_push):
   lock = try_lock()
   if not lock:
@@ -483,7 +523,9 @@ def run(num_branches_to_push):
     check_n_submissions(log, commit_id, commitfest_id, submissions, num_branches_to_push)
     log.write("== finishing at %s\n" % str(datetime.datetime.now()))
     log.flush()
-  build_web_page(commitfest_id, submissions)
+  build_web_page(commitfest_id, submissions, None)
+  for author in unique_authors(submissions):
+    build_web_page(commitfest_id, submissions, author)
   lock.close()
 
 if __name__ == "__main__":
