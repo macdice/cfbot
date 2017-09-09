@@ -325,6 +325,7 @@ def build_web_page(commitfest_id, submissions):
     f.write("""
 <html>
   <head>
+    <meta charset="UTF-8"/>
     <title>PostgreSQL Patch Tester</title>
     <style type="text/css">
       body {
