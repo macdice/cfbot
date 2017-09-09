@@ -77,7 +77,7 @@ def get_latest_patches_from_thread_url(thread_url):
   message_attachments = []
   message_id = None
   for line in slow_fetch(thread_url).splitlines():
-    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(patch|tar\\.gz|tgz))">', line)
+    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(patch|tar\\.gz|tgz|tar\\.bz2))">', line)
     if groups:
       message_attachments.append("https://www.postgresql.org" + groups.group(1))
       selected_message_attachments = message_attachments
@@ -91,7 +91,7 @@ def get_latest_patches_from_thread_url(thread_url):
   # otherwise give up on this thread (we don't know how to combine patches and
   # tarballs)
   if selected_message_attachments != None:
-    if any(x.endswith(".tgz") or x.endswith(".tar.gz") for x in selected_message_attachments):
+    if any(x.endswith(".tgz") or x.endswith(".tar.gz") or x.endswith(".tar.bz2") for x in selected_message_attachments):
       if len(selected_message_attachments) > 1:
         selected_message_id = None
         selected_message_attachments = None
@@ -250,7 +250,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
                 if popen.returncode != 0:
                   failed_to_apply = True
                   break
-            elif path.endswith(".tgz") or path.endswith(".tar.gz"):
+            elif path.endswith(".tgz") or path.endswith(".tar.gz") or path.endswith(".tar.bz2"):
               apply_log.write("== Applying patches from tarball %s...\n" % path)
               apply_log.flush()
               # TODO catch errors manipulating tar files...
