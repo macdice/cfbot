@@ -178,6 +178,8 @@ def sort_and_rotate_submissions(submissions, last_submission_id):
 
 def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
 
+  activity_message = "Idle."
+
   # what was the last submission ID we checked?
   last_submission_id_path = os.path.join("patches", commitfest_id, "last_submission_id")
   if os.path.exists(last_submission_id_path):
@@ -300,6 +302,7 @@ Patches fetched from: https://www.postgresql.org/message-id/%s
             log.flush()
             os.environ["GIT_SSH_COMMAND"] = CFBOT_REPO_SSH_COMMAND
             subprocess.check_call("cd postgresql && git push -q -f cfbot-repo %s" % (branch,), shell=True)
+            activity_message = """Pushed branch <a href="https://github.com/postgresql-cfbot/postgresql/tree/%s">%s</a>, triggered by commit <a href="https://git.postgresql.org/gitweb/?p=postgresql.git;a=commitdiff;h=%s">%s</a>.  Waiting for a while to be polite before rebuilding items marked "&bull;"...""" % (branch, branch, commit_id, commit_id[:8])
           n = n - 1
 
       # remember this ID so we can start after this next time
@@ -307,6 +310,7 @@ Patches fetched from: https://www.postgresql.org/message-id/%s
 
       if n <= 0:
         break
+  return activity_message
 
 def sort_status_name(submission):
   """An ordering function that puts statuses in order of most interest..."""
@@ -336,7 +340,7 @@ def all_authors(submission):
       results.append(author)
   return results
  
-def build_web_page(commitfest_id, submissions, filter_author):
+def build_web_page(commit_id, commitfest_id, submissions, filter_author, activity_message):
   """Build a web page that lists all known entries and shows the badges."""
 
   last_status = None
@@ -381,8 +385,9 @@ def build_web_page(commitfest_id, submissions, filter_author):
       &rarr;
       <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>.
     </p>
+    <p>Current status: %s</p>
     <table>
-""" % (commitfest_id,))
+""" % (commitfest_id, activity_message))
     for submission in sorted(submissions, key=sort_status_name):
 
       # skip if we need to filter this one out
@@ -394,6 +399,7 @@ def build_web_page(commitfest_id, submissions, filter_author):
       submission_dir = os.path.join("patches", commitfest_id, str(submission.id))
       apply_status_path = os.path.join(submission_dir, "apply_status")
       message_id_path = os.path.join(submission_dir, "message_id")
+      commit_id_path = os.path.join(submission_dir, "commit_id")
       name_path = os.path.join(submission_dir, "name")
       status_path = os.path.join(submission_dir, "status")
       if not os.path.exists(apply_status_path) or not os.path.exists(message_id_path) or not os.path.exists(name_path) or not os.path.exists(status_path):
@@ -402,6 +408,11 @@ def build_web_page(commitfest_id, submissions, filter_author):
       message_id = read_file(message_id_path)
       name = submission.name #read_file(name_path)
       status = submission.status #read_file(status_path)
+
+      # check if this submission is queued for rebuilding
+      build_needed_indicator = False
+      if apply_status == "passing" and (not os.path.exists(commit_id_path) or read_file(commit_id_path) != commit_id):
+        build_needed_indicator = True
 
       # create a new heading row if this is a new CF status
       if last_status == None or last_status != status:
@@ -440,6 +451,10 @@ def build_web_page(commitfest_id, submissions, filter_author):
         f.write("""        <td><a href="%s/%s.log"><img src="apply-passing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
         #f.write("""        <td><a href="https://github.com/postgresql-cfbot/postgresql/tree/commitfest/%s/%s"><img src="apply-passing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
         f.write("""        <td><a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches"><img src="https://travis-ci.org/postgresql-cfbot/postgresql.svg?branch=commitfest/%s/%s" alt="Build Status" /></a></td>\n""" % (commitfest_id, submission.id))
+        if build_needed_indicator:
+          f.write("""        <td>&bull;</td>\n""")
+        else:
+          f.write("""        <td></td>\n""")
       f.write("      </tr>\n")
     f.write("""
     </table>
@@ -520,12 +535,12 @@ def run(num_branches_to_push):
     log.write("commitfest = %s\n" % commitfest_id)
     log.write("commit = %s\n" % commit_id)
     log.flush()
-    check_n_submissions(log, commit_id, commitfest_id, submissions, num_branches_to_push)
+    activity_message = check_n_submissions(log, commit_id, commitfest_id, submissions, num_branches_to_push)
     log.write("== finishing at %s\n" % str(datetime.datetime.now()))
     log.flush()
-  build_web_page(commitfest_id, submissions, None)
+  build_web_page(commit_id, commitfest_id, submissions, None, activity_message)
   for author in unique_authors(submissions):
-    build_web_page(commitfest_id, submissions, author)
+    build_web_page(commit_id, commitfest_id, submissions, author, activity_message)
   lock.close()
 
 if __name__ == "__main__":
