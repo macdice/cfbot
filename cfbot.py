@@ -200,6 +200,10 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
       write_file(os.path.join(patch_dir, "status"), submission.status)
       write_file(os.path.join(patch_dir, "name"), submission.name)
     thread_url = get_thread_url_for_submission(commitfest_id, submission.id)
+    # BEGIN HORRENDOUS HACK
+    if submission.id == 951:
+      thread_url = "https://www.postgresql.org/message-id/flat/CAEepm=1iiEzCVLD=RoBgtZSyEY1CR-Et7fRc9prCZ9MuTz3pWg@mail.gmail.com"
+    # END
     #if submission.status not in ("Ready for Committer", "Needs review"):
     #  continue
     if thread_url == None:
