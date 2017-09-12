@@ -3,6 +3,7 @@
 import datetime
 import errno
 import fcntl
+import gzip
 import HTMLParser
 import os
 import re
@@ -78,7 +79,7 @@ def get_latest_patches_from_thread_url(thread_url):
   message_attachments = []
   message_id = None
   for line in slow_fetch(thread_url).splitlines():
-    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(patch|tar\\.gz|tgz|tar\\.bz2))">', line)
+    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2))">', line)
     if groups:
       message_attachments.append("https://www.postgresql.org" + groups.group(1))
       selected_message_attachments = message_attachments
@@ -249,6 +250,16 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
                 apply_log.write("== Applying patch %s...\n" % path)
                 apply_log.flush()
                 popen = subprocess.Popen("cd postgresql && patch -p1 --batch --silent", shell=True, stdin=f, stdout=apply_log, stderr=apply_log)
+                popen.wait()
+                if popen.returncode != 0:
+                  failed_to_apply = True
+                  break
+            elif path.endswith(".patch.gz"):
+              with gzip.open(os.path.join(patch_dir, path), "r") as f:
+                apply_log.write("== Applying patch %s...\n" % path)
+                apply_log.flush()
+                popen = subprocess.Popen("cd postgresql && patch -p1 --batch --silent", shell=True, stdin=subprocess.PIPE, stdout=apply_log, stderr=apply_log)
+                popen.communicate(input=f.read())
                 popen.wait()
                 if popen.returncode != 0:
                   failed_to_apply = True
