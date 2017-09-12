@@ -205,11 +205,13 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
     if thread_url == None:
       continue
 
+    new_patch = False
     message_id, patches = get_latest_patches_from_thread_url(thread_url)
     if message_id:
       # download the patches, if we don't already have them
       message_id_path = os.path.join(patch_dir, "message_id")
       if not os.path.exists(message_id_path) or read_file(message_id_path) != message_id:
+        new_patch = True # affects the friendly status message
         log.write("    message ID %s is new\n" % message_id)
         log.flush()
         tmp = patch_dir + ".tmp"
@@ -313,7 +315,10 @@ Patches fetched from: https://www.postgresql.org/message-id/%s
             log.flush()
             os.environ["GIT_SSH_COMMAND"] = CFBOT_REPO_SSH_COMMAND
             subprocess.check_call("cd postgresql && git push -q -f cfbot-repo %s" % (branch,), shell=True)
-            activity_message = """Pushed branch <a href="https://github.com/postgresql-cfbot/postgresql/tree/%s">%s</a>, triggered by commit <a href="https://git.postgresql.org/gitweb/?p=postgresql.git;a=commitdiff;h=%s">%s</a>.  Waiting for a while to be polite before rebuilding items marked "&bull;"...""" % (branch, branch, commit_id, commit_id[:8])
+            if new_patch:
+              activity_message = """Pushed branch <a href="https://github.com/postgresql-cfbot/postgresql/tree/%s">%s</a>, triggered by <a href="https://www.postgresql.org/message-id/%s">new patch</a>.""" % (branch, branch, message_id)
+            else:
+              activity_message = """Pushed branch <a href="https://github.com/postgresql-cfbot/postgresql/tree/%s">%s</a>, triggered by commit <a href="https://git.postgresql.org/gitweb/?p=postgresql.git;a=commitdiff;h=%s">%s</a>.  Waiting for a while to be polite before rebuilding items marked "&bull;"...""" % (branch, branch, commit_id, commit_id[:8])
           n = n - 1
 
       # remember this ID so we can start after this next time
