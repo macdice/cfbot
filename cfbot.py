@@ -53,7 +53,9 @@ language: c
 cache: ccache
 before_install:
   - echo '/tmp/%e-%s-%p.core' | sudo tee /proc/sys/kernel/core_pattern
-script: ./configure --enable-debug --enable-cassert --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make -j4 all contrib docs && make check-world
+script: ./configure --enable-debug --enable-cassert --enable-coverage --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make -j4 all contrib docs && make check-world
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
 after_failure:
   - for f in ` find . -name regression.diffs ` ; do echo "========= Contents of $f" ; head -1000 $f ; done
   - |
@@ -431,7 +433,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
       &rarr;
       <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>
       &rarr;
-      <a href="https://codecov.io/gh/postgresql-cfbot/postgresql/commits">Codecov</a> (<a href="https://www.postgresql.org/message-id/flat/CAEepm%%3D2bP3TBMFBArP6o20AZaRduWjMnjCjt22hSdnA-EvrtCw%%40mail.gmail.com">temporarily disabled</a>).
+      <a href="https://codecov.io/gh/postgresql-cfbot/postgresql/commits">Codecov</a>.
     </p>
     <p>Current status: %s</p>
     <table>
