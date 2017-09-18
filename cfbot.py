@@ -30,16 +30,41 @@ CFBOT_REPO_SSH_COMMAND="ssh -i ~/.ssh/cfbot_github_rsa"
 
 # travis build settings that will be added to automatically generated branches
 TRAVIS_FILE = """
+sudo: required
+addons:
+  apt:
+    packages:
+      - gdb
+      - lcov
+      - libipc-run-perl
+      - libperl-dev
+      - libpython-dev
+      - tcl-dev
+      - libldap2-dev
+      - libicu-dev
+      - docbook
+      - docbook-dsssl
+      - docbook-xsl
+      - libxml2-utils
+      - openjade1.3
+      - opensp
+      - xsltproc
 language: c
 cache: ccache
 before_install:
- - "sudo apt-get update"
- - "sudo apt-get install libipc-run-perl libperl-dev libpython-dev tcl-dev libldap2-dev libicu-dev"
- - "sudo apt-get install docbook docbook-dsssl docbook-xsl libxml2-utils openjade1.3 opensp xsltproc"
-script: ./configure --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make && make check-world && (cd doc && make)
+  - echo -j3 > ~/.proverc
+  - echo '/tmp/%e-%s-%p.core' | sudo tee /proc/sys/kernel/core_pattern
+script: ./configure --enable-debug --enable-cassert --enable-coverage --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make -j4 all contrib docs && make check-world
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
 after_failure:
- - echo
- - for f in ` find . -name regression.diffs ` ; do echo "========= Contents of $f" ; head -1000 $f ; done
+  - for f in ` find . -name regression.diffs ` ; do echo "========= Contents of $f" ; head -1000 $f ; done
+  - |
+    for corefile in $(find /tmp/ -name '*.core' 2>/dev/null) ; do
+      binary=tmp_install/usr/local/pgsql/bin/postgres
+      echo dumping $corefile for $binary
+      gdb --batch --quiet -ex "thread apply all bt full" -ex "quit" $binary $corefile
+    done
 """
 
 # images used for "apply" badges
