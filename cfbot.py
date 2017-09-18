@@ -61,7 +61,7 @@ after_failure:
   - for f in ` find . -name regression.diffs ` ; do echo "========= Contents of $f" ; head -1000 $f ; done
   - |
     for corefile in $(find /tmp/ -name '*.core' 2>/dev/null) ; do
-      binary=tmp_install/usr/local/pgsql/bin/postgres
+      binary=$(gdb -quiet -core $corefile -batch -ex 'info auxv' | grep AT_EXECFN | perl -pe "s/^.*\"(.*)\"\$/\$1/g")
       echo dumping $corefile for $binary
       gdb --batch --quiet -ex "thread apply all bt full" -ex "quit" $binary $corefile
     done
@@ -280,7 +280,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
               with open(os.path.join(patch_dir, path), "r") as f:
                 apply_log.write("== Applying patch %s...\n" % path)
                 apply_log.flush()
-                popen = subprocess.Popen("cd postgresql && patch -p1 --batch --silent", shell=True, stdin=f, stdout=apply_log, stderr=apply_log)
+                popen = subprocess.Popen("cd postgresql && patch -p1 --no-backup-if-mismatch --batch --silent", shell=True, stdin=f, stdout=apply_log, stderr=apply_log)
                 popen.wait()
                 if popen.returncode != 0:
                   failed_to_apply = True
@@ -289,7 +289,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
               with gzip.open(os.path.join(patch_dir, path), "r") as f:
                 apply_log.write("== Applying patch %s...\n" % path)
                 apply_log.flush()
-                popen = subprocess.Popen("cd postgresql && patch -p1 --batch --silent", shell=True, stdin=subprocess.PIPE, stdout=apply_log, stderr=apply_log)
+                popen = subprocess.Popen("cd postgresql && patch -p1 --no-backup-if-mismatch --batch --silent", shell=True, stdin=subprocess.PIPE, stdout=apply_log, stderr=apply_log)
                 popen.communicate(input=f.read())
                 popen.wait()
                 if popen.returncode != 0:
@@ -305,7 +305,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
                     continue
                   apply_log.write("== Applying patch %s...\n" % name)
                   apply_log.flush()
-                  popen = subprocess.Popen("cd postgresql && patch -p1 --batch --silent", shell=True, stdin=subprocess.PIPE, stdout=apply_log, stderr=apply_log)
+                  popen = subprocess.Popen("cd postgresql && patch -p1 --no-backup-if-mismatch --batch --silent", shell=True, stdin=subprocess.PIPE, stdout=apply_log, stderr=apply_log)
                   f = tarball.extractfile(name)
                   popen.communicate(input=f.read())
                   f.close()
@@ -428,7 +428,9 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
       &rarr; 
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
       &rarr;
-      <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>.
+      <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>
+      &rarr;
+      <a href="https://codecov.io/gh/postgresql-cfbot/postgresql/branches">Codecov</a>.
     </p>
     <p>Current status: %s</p>
     <table>
