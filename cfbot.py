@@ -60,7 +60,7 @@ after_failure:
   - for f in ` find . -name regression.diffs ` ; do echo "========= Contents of $f" ; head -1000 $f ; done
   - |
     for corefile in $(find /tmp/ -name '*.core' 2>/dev/null) ; do
-      binary=$(gdb -quiet -core $corefile -batch -ex 'info auxv' | grep AT_EXECFN | perl -pe "s/^.*\"(.*)\"\$/\$1/g")
+      binary=$(gdb -quiet -core $corefile -batch -ex 'info auxv' | grep AT_EXECFN | perl -pe "s/^.*\\"(.*)\\"\$/\$1/g")
       echo dumping $corefile for $binary
       gdb --batch --quiet -ex "thread apply all bt full" -ex "quit" $binary $corefile
     done
