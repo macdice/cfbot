@@ -53,7 +53,19 @@ language: c
 cache: ccache
 before_install:
   - echo '/tmp/%e-%s-%p.core' | sudo tee /proc/sys/kernel/core_pattern
-script: ./configure --enable-debug --enable-cassert --enable-coverage --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make -j4 all contrib docs && make check-world
+  - echo "deb http://archive.ubuntu.com/ubuntu xenial main" | sudo tee /etc/apt/sources.list.d/xenial.list > /dev/null
+  - |
+    sudo tee -a /etc/apt/preferences.d/trusty > /dev/null <<EOF
+    Package: *
+    Pin: release n=xenial
+    Pin-Priority: 1
+    
+    Package: make
+    Pin: release n=xenial
+    Pin-Priority: 500
+    EOF
+  - sudo apt-get update && sudo apt-get install make
+script: ./configure --enable-debug --enable-cassert --enable-coverage --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make -j4 all contrib docs && make -Otarget -j3 check-world
 after_success:
   - bash <(curl -s https://codecov.io/bash)
 after_failure:
