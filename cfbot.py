@@ -434,7 +434,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
       &rarr;
       <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>
       &rarr;
-      <a href="https://codecov.io/gh/postgresql-cfbot/postgresql/branches">Codecov</a>.
+      <a href="https://codecov.io/gh/postgresql-cfbot/postgresql/commits">Codecov</a>.
     </p>
     <p>Current status: %s</p>
     <table>
