@@ -52,7 +52,6 @@ addons:
 language: c
 cache: ccache
 before_install:
-  - echo -j3 > ~/.proverc
   - echo '/tmp/%e-%s-%p.core' | sudo tee /proc/sys/kernel/core_pattern
 script: ./configure --enable-debug --enable-cassert --enable-coverage --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-icu && make -j4 all contrib docs && make check-world
 after_success:
