@@ -142,6 +142,12 @@ def get_latest_patches_from_thread_url(thread_url):
 def get_thread_url_for_submission(commitfest_id, submission_id):
   """Given a commitfest ID and a submission ID, return the URL of the 'whole
      thread' page in the mailing list archives."""
+  if submission_id == 951:
+    # this one has two threads, and the interesting one is listed first (need to learn about dates?)
+    return "https://www.postgresql.org/message-id/flat/CAEepm=1iiEzCVLD=RoBgtZSyEY1CR-Et7fRc9prCZ9MuTz3pWg@mail.gmail.com"
+  elif submission_id == 994:
+    # this one is truncated, and there is a new 'flat' URL for the continuation
+    return "https://www.postgresql.org/message-id/flat/CAOGQiiN9m%3DKRf-et1T0AcimbyAB9hDzJqGkHnOBjWT4uF1z1BQ%40mail.gmail.com"
   # if there is more than one, we'll take the furthest down on the page...
   result = None
   url = "https://commitfest.postgresql.org/%s/%s/" % (commitfest_id, submission_id)
@@ -236,10 +242,6 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
       write_file(os.path.join(patch_dir, "status"), submission.status)
       write_file(os.path.join(patch_dir, "name"), submission.name)
     thread_url = get_thread_url_for_submission(commitfest_id, submission.id)
-    # BEGIN HORRENDOUS HACK
-    if submission.id == 951:
-      thread_url = "https://www.postgresql.org/message-id/flat/CAEepm=1iiEzCVLD=RoBgtZSyEY1CR-Et7fRc9prCZ9MuTz3pWg@mail.gmail.com"
-    # END
     #if submission.status not in ("Ready for Committer", "Needs review"):
     #  continue
     if thread_url == None:
