@@ -193,7 +193,7 @@ def get_current_commitfest_id():
     if groups:
       commitfest_id = groups.group(1)
       state = groups.group(2)
-      result = commitfest_id
+      result = int(commitfest_id)
   return result
 
 def read_file(path):
@@ -224,7 +224,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
   activity_message = "Idle."
 
   # what was the last submission ID we checked?
-  last_submission_id_path = os.path.join("patches", commitfest_id, "last_submission_id")
+  last_submission_id_path = os.path.join("patches", str(commitfest_id), "last_submission_id")
   if os.path.exists(last_submission_id_path):
     last_submission_id = int(read_file(last_submission_id_path))
     log.write("last submission ID was %s\n" % last_submission_id)
@@ -236,7 +236,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
   for submission in sort_and_rotate_submissions(submissions, last_submission_id):
     log.write("==> considering submission ID %s\n" % submission.id)
     log.flush()
-    patch_dir = os.path.join("patches", commitfest_id, str(submission.id))
+    patch_dir = os.path.join("patches", str(commitfest_id), str(submission.id))
     if os.path.isdir(patch_dir):
       # write name and status to disk so our web page builder can use them...
       write_file(os.path.join(patch_dir, "status"), submission.status)
@@ -278,14 +278,14 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
       # if the commit ID has moved since last time, or we
       # have a new patchest, then we need to make a new branch
       # to trigger a new build
-      commit_id_path = os.path.join("patches", commitfest_id, str(submission.id), "commit_id")
+      commit_id_path = os.path.join("patches", str(commitfest_id), str(submission.id), "commit_id")
       if not os.path.exists(commit_id_path) or read_file(commit_id_path) != commit_id:
         log.write("    commit ID %s is new\n" % commit_id)
         log.flush()
         branch = "commitfest/%s/%s" % (commitfest_id, submission.id)
         subprocess.check_call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master", shell=True)
         failed_to_apply = False
-        with open(os.path.join("logs", commitfest_id, str(submission.id) + ".log"), "w") as apply_log:
+        with open(os.path.join("logs", str(commitfest_id), str(submission.id) + ".log"), "w") as apply_log:
           apply_log.write("== Fetched patches from message ID %s\n" % message_id)
           apply_log.write("== Applying on top of commit %s\n" % commit_id)
           for path in sorted(os.listdir(patch_dir)):
@@ -326,7 +326,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
                   if popen.returncode != 0:
                     failed_to_apply = True
                     break
-        apply_status_path = os.path.join("patches", commitfest_id, str(submission.id), "apply_status")
+        apply_status_path = os.path.join("patches", str(commitfest_id), str(submission.id), "apply_status")
         if failed_to_apply:
           log.write("    apply failed (see apply log for details)\n")
           log.flush()
@@ -460,7 +460,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
 
       # load the info about this submission that was recorded last time
       # we actually rebuilt the branch
-      submission_dir = os.path.join("patches", commitfest_id, str(submission.id))
+      submission_dir = os.path.join("patches", str(commitfest_id), str(submission.id))
       apply_status_path = os.path.join(submission_dir, "apply_status")
       message_id_path = os.path.join(submission_dir, "message_id")
       commit_id_path = os.path.join(submission_dir, "commit_id")
@@ -484,7 +484,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
         last_status = status
 
       # create an apply pass/fail badge
-      commitfest_dir = os.path.join("www", commitfest_id)
+      commitfest_dir = os.path.join("www", str(commitfest_id))
       if not os.path.exists(commitfest_dir):
         os.mkdir(commitfest_dir)
       # write an image file for each submission, so that the badge could be included on other websites
@@ -492,7 +492,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
         write_file(os.path.join(commitfest_dir, "%s.apply.svg" % (submission.id,)), APPLY_FAILING_SVG)
       else:
         write_file(os.path.join(commitfest_dir, "%s.apply.svg" % (submission.id,)), APPLY_PASSING_SVG)
-      write_file(os.path.join(commitfest_dir, "%s.log" % submission.id), read_file(os.path.join("logs", commitfest_id, str(submission.id) + ".log")))
+      write_file(os.path.join(commitfest_dir, "%s.log" % submission.id), read_file(os.path.join("logs", str(commitfest_id), str(submission.id) + ".log")))
       if len(name) > 80:
         name = name[:80] + "..."
       # convert list of authors into links
@@ -551,12 +551,12 @@ def prepare_filesystem(commitfest_id):
     os.rename("www.tmp", "www")
   if not os.path.exists("logs"):
     os.mkdir("logs")
-  if not os.path.exists(os.path.join("logs", commitfest_id)):
-    os.mkdir(os.path.join("logs", commitfest_id))
+  if not os.path.exists(os.path.join("logs", str(commitfest_id))):
+    os.mkdir(os.path.join("logs", str(commitfest_id)))
   if not os.path.exists("patches"):
     os.mkdir("patches")
-  if not os.path.isdir(os.path.join("patches", commitfest_id)):
-    os.mkdir(os.path.join("patches", commitfest_id))
+  if not os.path.isdir(os.path.join("patches", str(commitfest_id))):
+    os.mkdir(os.path.join("patches", str(commitfest_id)))
 
 def update_tree():
   """Pull changes from PostgreSQL master and return the HEAD commit ID."""
