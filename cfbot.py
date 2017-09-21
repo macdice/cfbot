@@ -89,8 +89,9 @@ APPLY_FAILING_SVG = """
 class Submission:
   """A submission in a Commitfest."""
 
-  def __init__(self, submission_id, name, status, authors):
+  def __init__(self, submission_id, commitfest_id, name, status, authors):
     self.id = int(submission_id)
+    self.commitfest_id = commitfest_id
     self.name = name
     self.status = status
     self.authors = authors
@@ -175,7 +176,7 @@ def get_submissions_for_commitfest(commitfest_id):
       if groups:
         authors = groups.group(1)
         authors = re.sub(" *\\([^)]*\\)", "", authors)
-        result.append(Submission(submission_id, name, state, authors))
+        result.append(Submission(submission_id, commitfest_id, name, state, authors))
         continue
     groups = re.search('<td><span class="label label-[^"]*">([^<]+)</span></td>', line)
     if groups:
@@ -219,12 +220,12 @@ def sort_and_rotate_submissions(submissions, last_submission_id):
   rest = [s for s in submissions if s.id > last_submission_id]
   return rest + done
 
-def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
+def check_n_submissions(log, commit_id, submissions, n):
 
   activity_message = "Idle."
 
   # what was the last submission ID we checked?
-  last_submission_id_path = os.path.join("patches", str(commitfest_id), "last_submission_id")
+  last_submission_id_path = "last_submission_id"
   if os.path.exists(last_submission_id_path):
     last_submission_id = int(read_file(last_submission_id_path))
     log.write("last submission ID was %s\n" % last_submission_id)
@@ -236,12 +237,12 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
   for submission in sort_and_rotate_submissions(submissions, last_submission_id):
     log.write("==> considering submission ID %s\n" % submission.id)
     log.flush()
-    patch_dir = os.path.join("patches", str(commitfest_id), str(submission.id))
+    patch_dir = os.path.join("patches", str(submission.commitfest_id), str(submission.id))
     if os.path.isdir(patch_dir):
       # write name and status to disk so our web page builder can use them...
       write_file(os.path.join(patch_dir, "status"), submission.status)
       write_file(os.path.join(patch_dir, "name"), submission.name)
-    thread_url = get_thread_url_for_submission(commitfest_id, submission.id)
+    thread_url = get_thread_url_for_submission(submission.commitfest_id, submission.id)
     #if submission.status not in ("Ready for Committer", "Needs review"):
     #  continue
     if thread_url == None:
@@ -278,14 +279,14 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
       # if the commit ID has moved since last time, or we
       # have a new patchest, then we need to make a new branch
       # to trigger a new build
-      commit_id_path = os.path.join("patches", str(commitfest_id), str(submission.id), "commit_id")
+      commit_id_path = os.path.join("patches", str(submission.commitfest_id), str(submission.id), "commit_id")
       if not os.path.exists(commit_id_path) or read_file(commit_id_path) != commit_id:
         log.write("    commit ID %s is new\n" % commit_id)
         log.flush()
-        branch = "commitfest/%s/%s" % (commitfest_id, submission.id)
+        branch = "commitfest/%s/%s" % (submission.commitfest_id, submission.id)
         subprocess.check_call("cd postgresql && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master", shell=True)
         failed_to_apply = False
-        with open(os.path.join("logs", str(commitfest_id), str(submission.id) + ".log"), "w") as apply_log:
+        with open(os.path.join("logs", str(submission.commitfest_id), str(submission.id) + ".log"), "w") as apply_log:
           apply_log.write("== Fetched patches from message ID %s\n" % message_id)
           apply_log.write("== Applying on top of commit %s\n" % commit_id)
           for path in sorted(os.listdir(patch_dir)):
@@ -326,7 +327,7 @@ def check_n_submissions(log, commit_id, commitfest_id, submissions, n):
                   if popen.returncode != 0:
                     failed_to_apply = True
                     break
-        apply_status_path = os.path.join("patches", str(commitfest_id), str(submission.id), "apply_status")
+        apply_status_path = os.path.join("patches", str(submission.commitfest_id), str(submission.id), "apply_status")
         if failed_to_apply:
           log.write("    apply failed (see apply log for details)\n")
           log.flush()
@@ -353,7 +354,7 @@ the email thread or the master branch changes.
 Commitfest entry: https://commitfest.postgresql.org/%s/%s
 Patch(es): https://www.postgresql.org/message-id/%s
 Author(s): %s
-""" % (commitfest_id, submission.id, submission.name, commitfest_id, submission.id, message_id, submission.authors))
+""" % (submission.commitfest_id, submission.id, submission.name, submission.commitfest_id, submission.id, message_id, submission.authors))
           subprocess.check_call("cd postgresql && git commit -q -F ../commit_message", shell=True)
           write_file(commit_id_path, commit_id)
           if n > 0:
@@ -402,12 +403,15 @@ def all_authors(submission):
       results.append(author)
   return results
  
-def build_web_page(commit_id, commitfest_id, submissions, filter_author, activity_message):
+def build_web_page(commit_id, commitfest_id, submissions, filter_author, activity_message, path):
   """Build a web page that lists all known entries and shows the badges."""
 
   last_status = None
   submissions = sorted(submissions, key=sort_status_name)
-  with open("www/html.tmp", "w") as f:
+  commitfest_id_for_link = commitfest_id
+  if commitfest_id_for_link == None:
+    commitfest_id_for_link = ""
+  with open(path + ".tmp", "w") as f:
     f.write("""
 <html>
   <head>
@@ -441,26 +445,32 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
     <h1>PostgreSQL Patch Tester</h1>
     <p>
       Here lives an experimental bot that does this:
-      <a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
+      <a href="https://commitfest.postgresql.org/%s">Commitfest</a>
       &rarr; 
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
       &rarr;
       <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis CI</a>
       &rarr;
       <a href="https://codecov.io/gh/postgresql-cfbot/postgresql/commits">Codecov</a>.
+      You can find a report for the <a href="index.html">current CF</a>, the
+      <a href="next.html">next CF</a> or individual patch authors.
     </p>
     <p>Current status: %s</p>
     <table>
-""" % (commitfest_id, activity_message))
+""" % (commitfest_id_for_link, activity_message))
     for submission in sorted(submissions, key=sort_status_name):
 
-      # skip if we need to filter this one out
+      # skip if we need to filter by commitfest
+      if commitfest_id != None and submission.commitfest_id != commitfest_id:
+        continue
+
+      # skip if we need to filter by author
       if filter_author != None and filter_author not in all_authors(submission):
         continue
 
       # load the info about this submission that was recorded last time
       # we actually rebuilt the branch
-      submission_dir = os.path.join("patches", str(commitfest_id), str(submission.id))
+      submission_dir = os.path.join("patches", str(submission.commitfest_id), str(submission.id))
       apply_status_path = os.path.join(submission_dir, "apply_status")
       message_id_path = os.path.join(submission_dir, "message_id")
       commit_id_path = os.path.join(submission_dir, "commit_id")
@@ -484,7 +494,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
         last_status = status
 
       # create an apply pass/fail badge
-      commitfest_dir = os.path.join("www", str(commitfest_id))
+      commitfest_dir = os.path.join("www", str(submission.commitfest_id))
       if not os.path.exists(commitfest_dir):
         os.mkdir(commitfest_dir)
       # write an image file for each submission, so that the badge could be included on other websites
@@ -492,7 +502,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
         write_file(os.path.join(commitfest_dir, "%s.apply.svg" % (submission.id,)), APPLY_FAILING_SVG)
       else:
         write_file(os.path.join(commitfest_dir, "%s.apply.svg" % (submission.id,)), APPLY_PASSING_SVG)
-      write_file(os.path.join(commitfest_dir, "%s.log" % submission.id), read_file(os.path.join("logs", str(commitfest_id), str(submission.id) + ".log")))
+      write_file(os.path.join(commitfest_dir, "%s.log" % submission.id), read_file(os.path.join("logs", str(submission.commitfest_id), str(submission.id) + ".log")))
       if len(name) > 80:
         name = name[:80] + "..."
       # convert list of authors into links
@@ -503,18 +513,18 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
       # write out an entry
       f.write("""
       <tr>
-        <td>#%s</td>
+        <td>%s/%s</td>
         <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
         <td>%s</td>
         <td><a href="https://www.postgresql.org/message-id/%s">patch</a></td>
-""" % (submission.id, commitfest_id, submission.id, name, author_links_string, message_id))
+""" % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, name, author_links_string, message_id))
       if apply_status == "failing":
-        f.write("""        <td><a href="%s/%s.log"><img src="apply-failing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
+        f.write("""        <td><a href="%s/%s.log"><img src="apply-failing.svg"/></a></td>\n""" % (submission.commitfest_id, submission.id))
         f.write("""        <td></td>\n""")
       else:
-        f.write("""        <td><a href="%s/%s.log"><img src="apply-passing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
+        f.write("""        <td><a href="%s/%s.log"><img src="apply-passing.svg"/></a></td>\n""" % (submission.commitfest_id, submission.id))
         #f.write("""        <td><a href="https://github.com/postgresql-cfbot/postgresql/tree/commitfest/%s/%s"><img src="apply-passing.svg"/></a></td>\n""" % (commitfest_id, submission.id))
-        f.write("""        <td><a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches"><img src="https://travis-ci.org/postgresql-cfbot/postgresql.svg?branch=commitfest/%s/%s" alt="Build Status" /></a></td>\n""" % (commitfest_id, submission.id))
+        f.write("""        <td><a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches"><img src="https://travis-ci.org/postgresql-cfbot/postgresql.svg?branch=commitfest/%s/%s" alt="Build Status" /></a></td>\n""" % (submission.commitfest_id, submission.id))
         if build_needed_indicator:
           f.write("""        <td>&bull;</td>\n""")
         else:
@@ -527,10 +537,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
   </body>
 </html>
 """)
-  if filter_author == None:
-    os.rename("www/html.tmp", "www/index.html")
-  else:
-    os.rename("www/html.tmp", "www/%s" % make_author_url(filter_author))
+  os.rename(path + ".tmp", path)
 
 def prepare_repo():
   # set up a repo if we don't already have one
@@ -592,19 +599,21 @@ def run(num_branches_to_push):
   commit_id = update_tree()
   commitfest_id = get_current_commitfest_id()
   prepare_filesystem(commitfest_id)
-  submissions = get_submissions_for_commitfest(commitfest_id)
+  prepare_filesystem(commitfest_id + 1)
+  submissions = get_submissions_for_commitfest(commitfest_id) + get_submissions_for_commitfest(commitfest_id + 1)
   submissions = filter(lambda s: s.status in ("Ready for Committer", "Needs review", "Waiting on Author"), submissions)
   with open("logs/cfbot.%s.log" % datetime.date.today().isoformat(), "a") as log:
     log.write("== starting at %s\n" % str(datetime.datetime.now()))
     log.write("commitfest = %s\n" % commitfest_id)
     log.write("commit = %s\n" % commit_id)
     log.flush()
-    activity_message = check_n_submissions(log, commit_id, commitfest_id, submissions, num_branches_to_push)
+    activity_message = check_n_submissions(log, commit_id, submissions, num_branches_to_push)
     log.write("== finishing at %s\n" % str(datetime.datetime.now()))
     log.flush()
-  build_web_page(commit_id, commitfest_id, submissions, None, activity_message)
+  build_web_page(commit_id, commitfest_id, submissions, None, activity_message, "www/index.html")
   for author in unique_authors(submissions):
-    build_web_page(commit_id, commitfest_id, submissions, author, activity_message)
+    build_web_page(commit_id, None, submissions, author, activity_message, "www/" + make_author_url(author))
+  build_web_page(commit_id, commitfest_id + 1, submissions, None, activity_message, "www/next.html")
   lock.close()
 
 if __name__ == "__main__":
