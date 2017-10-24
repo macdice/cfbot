@@ -315,7 +315,7 @@ def check_n_submissions(log, commit_id, submissions, n):
               # TODO catch errors manipulating tar files...
               with tarfile.open(os.path.join(patch_dir, path), "r") as tarball:
                 for name in sorted(tarball.getnames()):
-                  if not name.endswith(".patch"):
+                  if not name.endswith(".patch") or "/." in name:
                     continue
                   apply_log.write("== Applying patch %s...\n" % name)
                   apply_log.flush()
