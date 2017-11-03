@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 
 import datetime
 import errno
@@ -6,20 +5,16 @@ import fcntl
 import gzip
 import HTMLParser
 import os
-import re
 import subprocess
 import shutil
 import sys
 import tarfile
-import time
 import unicodedata
 import urllib
 import urllib2
 import urlparse
 
-# politeness settings
-SLOW_FETCH_SLEEP = 1.0
-USER_AGENT = "cfbot from http://commitfest.cputube.org"
+from submission import *
 
 # where to pull PostgreSQL master branch from
 PG_REPO="git://git.postgresql.org/git/postgresql.git"
@@ -85,60 +80,6 @@ APPLY_PASSING_SVG = """
 APPLY_FAILING_SVG = """
 <svg xmlns="http://www.w3.org/2000/svg" width="81" height="20"><linearGradient id="a" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><rect rx="3" width="81" height="20" fill="#555"/><rect rx="3" x="37" width="44" height="20" fill="#e05d44"/><path fill="#e05d44" d="M37 0h4v20h-4z"/><rect rx="3" width="81" height="20" fill="url(#a)"/><g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11"><text x="19.5" y="15" fill="#010101" fill-opacity=".3">apply</text><text x="19.5" y="14">apply</text><text x="58" y="15" fill="#010101" fill-opacity=".3">failing</text><text x="58" y="14">failing</text></g></svg>
 """
-
-class Submission:
-  """A submission in a Commitfest."""
-
-  def __init__(self, submission_id, commitfest_id, name, status, authors):
-    self.id = int(submission_id)
-    self.commitfest_id = commitfest_id
-    self.name = name
-    self.status = status
-    self.authors = authors
-
-def slow_fetch(url):
-  """Fetch the body of a web URL, but sleep every time too to be kind to the
-     commitfest server."""
-  opener = urllib2.build_opener()
-  opener.addheaders = [('User-Agent', USER_AGENT)]
-  response = opener.open(url)
-  body = response.read()
-  response.close()
-  time.sleep(SLOW_FETCH_SLEEP)
-  return body
-  
-def get_latest_patches_from_thread_url(thread_url):
-  """Given a 'whole thread' URL from the archives, find the last message that
-     had at least one attachment called something.patch.  Return the message
-     ID and the list of URLs to fetch all the patches."""
-  selected_message_attachments = []
-  selected_message_id = None
-  message_attachments = []
-  message_id = None
-  for line in slow_fetch(thread_url).splitlines():
-    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2))">', line)
-    if groups:
-      message_attachments.append("https://www.postgresql.org" + groups.group(1))
-      selected_message_attachments = message_attachments
-      selected_message_id = message_id
-    else:
-      groups = re.search('<a name="([^"]+)"></a>', line)
-      if groups:
-        message_id = groups.group(1)
-        message_attachments = []
-  # if there is a tarball attachment, there must be only one attachment,
-  # otherwise give up on this thread (we don't know how to combine patches and
-  # tarballs)
-  if selected_message_attachments != None:
-    if any(x.endswith(".tgz") or x.endswith(".tar.gz") or x.endswith(".tar.bz2") for x in selected_message_attachments):
-      if len(selected_message_attachments) > 1:
-        selected_message_id = None
-        selected_message_attachments = None
-  # if there are multiple patch files, they had better follow the convention
-  # of leading numbers, otherwise we don't know how to apply them in the right
-  # order
-  # TODO
-  return selected_message_id, selected_message_attachments
 
 def get_thread_url_for_submission(commitfest_id, submission_id):
   """Given a commitfest ID and a submission ID, return the URL of the 'whole
@@ -357,7 +298,7 @@ Author(s): %s
 """ % (submission.commitfest_id, submission.id, submission.name, submission.commitfest_id, submission.id, message_id, submission.authors))
           subprocess.check_call("cd postgresql && git commit -q -F ../commit_message", shell=True)
           write_file(commit_id_path, commit_id)
-          if n > 0:
+          if False: # disable pushing for my own testing purposes
             log.write("    pushing branch %s\n" % branch)
             log.flush()
             os.environ["GIT_SSH_COMMAND"] = CFBOT_REPO_SSH_COMMAND
@@ -588,36 +529,3 @@ def unique_authors(submissions):
   for submission in submissions:
     results += all_authors(submission)
   return list(set(results))
-
-def run(num_branches_to_push):
-  lock = try_lock()
-  if not lock:
-    # another copy is already running in this directory, so exit quietly (for
-    # example if a cronjob starts before the last one has finished)
-    return
-  prepare_repo()
-  commit_id = update_tree()
-  commitfest_id = get_current_commitfest_id()
-  prepare_filesystem(commitfest_id)
-  prepare_filesystem(commitfest_id + 1)
-  submissions = get_submissions_for_commitfest(commitfest_id) + get_submissions_for_commitfest(commitfest_id + 1)
-  submissions = filter(lambda s: s.status in ("Ready for Committer", "Needs review", "Waiting on Author"), submissions)
-  with open("logs/cfbot.%s.log" % datetime.date.today().isoformat(), "a") as log:
-    log.write("== starting at %s\n" % str(datetime.datetime.now()))
-    log.write("commitfest = %s\n" % commitfest_id)
-    log.write("commit = %s\n" % commit_id)
-    log.flush()
-    activity_message = check_n_submissions(log, commit_id, submissions, num_branches_to_push)
-    log.write("== finishing at %s\n" % str(datetime.datetime.now()))
-    log.flush()
-  build_web_page(commit_id, commitfest_id, submissions, None, activity_message, "www/index.html")
-  for author in unique_authors(submissions):
-    build_web_page(commit_id, None, submissions, author, activity_message, "www/" + make_author_url(author))
-  build_web_page(commit_id, commitfest_id + 1, submissions, None, activity_message, "www/next.html")
-  lock.close()
-
-if __name__ == "__main__":
-  num_branches_to_push = 0
-  if len(sys.argv) > 1:
-    num_branches_to_push = int(sys.argv[1])
-  run(num_branches_to_push)
