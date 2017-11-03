@@ -127,11 +127,13 @@ def write_file(path, data):
     f.write(data)
   os.rename(path + ".tmp", path)
 
-def sort_and_rotate_submissions(submissions, last_submission_id):
+def sort_and_rotate_submissions(log, submissions):
   """Sort the given list of submissions, and then rotate them so that the one
      that follows 'last_submission_id' comes first (unless it is None).  This
      provides a simple way for us to carry on where we left off each time we
      run."""
+  last_submission_id = load_last_submission_id(log)
+
   submissions = sorted(submissions, key=lambda s: s.id)
   if last_submission_id == None:
       return submissions
@@ -139,21 +141,26 @@ def sort_and_rotate_submissions(submissions, last_submission_id):
   rest = [s for s in submissions if s.id > last_submission_id]
   return rest + done
 
-def check_n_submissions(log, commit_id, submissions, n):
+LAST_SUBMISSION_ID_PATH = "last_submission_id"
 
-  activity_message = "Idle."
-
-  # what was the last submission ID we checked?
-  last_submission_id_path = "last_submission_id"
-  if os.path.exists(last_submission_id_path):
-    last_submission_id = int(read_file(last_submission_id_path))
+def load_last_submission_id(log):
+  """ what was the last submission ID we checked? """
+  if os.path.exists(LAST_SUBMISSION_ID_PATH):
+    last_submission_id = int(read_file(LAST_SUBMISSION_ID_PATH))
     log.write("last submission ID was %s\n" % last_submission_id)
     log.flush()
   else:
     last_submission_id = None
 
+def write_last_submission_id(submission):
+  """ update the last submission ID we checked? """
+  write_file(LAST_SUBMISSION_ID_PATH, str(submission.id))
+
+def check_n_submissions(log, commit_id, submissions, n):
+  activity_message = "Idle."
+
   # now process n submissions, starting after that one
-  for submission in sort_and_rotate_submissions(submissions, last_submission_id):
+  for submission in sort_and_rotate_submissions(log, submissions):
     log.write("==> considering submission ID %s\n" % submission.id)
     log.flush()
     patch_dir = os.path.join("patches", str(submission.commitfest_id), str(submission.id))
@@ -288,7 +295,7 @@ Author(s): %s
           n = n - 1
 
       # remember this ID so we can start after this next time
-      write_file(last_submission_id_path, str(submission.id))
+      write_last_submission_id(submission)
 
       if n <= 0:
         break
