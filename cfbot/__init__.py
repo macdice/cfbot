@@ -316,15 +316,6 @@ Author(s): %s
         break
   return activity_message
 
-def sort_status_name(submission):
-  """An ordering function that puts statuses in order of most interest..."""
-  if submission.status == "Ready for Committer":
-    return "0" + submission.name.lower()
-  elif submission.status == "Needs review":
-    return "1" + submission.name.lower()
-  else:
-    return "2" + submission.name.lower()
-
 def make_author_url(author):
     text = author.strip()
     text = unicode(text, "utf-8")
@@ -336,19 +327,58 @@ def make_author_url(author):
     text = re.sub('[^0-9a-zA-Z_-]', '', text)
     return text + ".html"
 
-def all_authors(submission):
-  results = []
-  for author in submission.authors.split(","):
-    author = author.strip()
-    if author != "":
-      results.append(author)
-  return results
+
+def slow_fetch(url):
+  """Fetch the body of a web URL, but sleep every time too to be kind to the
+     commitfest server."""
+  opener = urllib2.build_opener()
+  opener.addheaders = [('User-Agent', USER_AGENT)]
+  response = opener.open(url)
+  body = response.read()
+  response.close()
+  time.sleep(SLOW_FETCH_SLEEP)
+  return body
+  
+def get_latest_patches_from_thread_url(thread_url):
+  """Given a 'whole thread' URL from the archives, find the last message that
+     had at least one attachment called something.patch.  Return the message
+     ID and the list of URLs to fetch all the patches."""
+  selected_message_attachments = []
+  selected_message_id = None
+  message_attachments = []
+  message_id = None
+  for line in slow_fetch(thread_url).splitlines():
+    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2))">', line)
+    if groups:
+      message_attachments.append("https://www.postgresql.org" + groups.group(1))
+      selected_message_attachments = message_attachments
+      selected_message_id = message_id
+    else:
+      groups = re.search('<a name="([^"]+)"></a>', line)
+      if groups:
+        message_id = groups.group(1)
+        message_attachments = []
+  # if there is a tarball attachment, there must be only one attachment,
+  # otherwise give up on this thread (we don't know how to combine patches and
+  # tarballs)
+  if selected_message_attachments != None:
+    if any(x.endswith(".tgz") or x.endswith(".tar.gz") or x.endswith(".tar.bz2") for x in selected_message_attachments):
+      if len(selected_message_attachments) > 1:
+        selected_message_id = None
+        selected_message_attachments = None
+  # if there are multiple patch files, they had better follow the convention
+  # of leading numbers, otherwise we don't know how to apply them in the right
+  # order
+  # TODO
+  return selected_message_id, selected_message_attachments
+
+
  
 def build_web_page(commit_id, commitfest_id, submissions, filter_author, activity_message, path):
   """Build a web page that lists all known entries and shows the badges."""
 
   last_status = None
-  submissions = sorted(submissions, key=sort_status_name)
+  submissions = sorted(submissions, key=lambda s: s.sort_status_name)
   commitfest_id_for_link = commitfest_id
   if commitfest_id_for_link == None:
     commitfest_id_for_link = ""
@@ -399,14 +429,14 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
     <p>Current status: %s</p>
     <table>
 """ % (commitfest_id_for_link, activity_message))
-    for submission in sorted(submissions, key=sort_status_name):
+    for submission in sorted(submissions, key=lambda s: s.sort_status_name):
 
       # skip if we need to filter by commitfest
       if commitfest_id != None and submission.commitfest_id != commitfest_id:
         continue
 
       # skip if we need to filter by author
-      if filter_author != None and filter_author not in all_authors(submission):
+      if filter_author != None and filter_author not in submission.all_authors():
         continue
 
       # load the info about this submission that was recorded last time
@@ -448,7 +478,7 @@ def build_web_page(commit_id, commitfest_id, submissions, filter_author, activit
         name = name[:80] + "..."
       # convert list of authors into links
       author_links = []
-      for author in all_authors(submission):
+      for author in submission.all_authors():
         author_links.append("""<a href="%s">%s</a>""" % (make_author_url(author), author))
       author_links_string = ", ".join(author_links)
       # write out an entry
@@ -527,5 +557,5 @@ def try_lock():
 def unique_authors(submissions):
   results = []
   for submission in submissions:
-    results += all_authors(submission)
+    results += submission.all_authors()
   return list(set(results))
