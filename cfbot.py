@@ -7,14 +7,13 @@ import gzip
 import HTMLParser
 import os
 import re
+import requests
 import subprocess
 import shutil
 import sys
 import tarfile
 import time
 import unicodedata
-import urllib
-import urllib2
 import urlparse
 
 # politeness settings
@@ -99,10 +98,8 @@ class Submission:
 def slow_fetch(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
      commitfest server."""
-  opener = urllib2.build_opener()
-  opener.addheaders = [('User-Agent', USER_AGENT)]
-  response = opener.open(url)
-  body = response.read()
+  response = requests.get(url, headers={'User-Agent': USER_AGENT})
+  body = response.content
   response.close()
   time.sleep(SLOW_FETCH_SLEEP)
   return body
@@ -269,8 +266,7 @@ def check_n_submissions(log, commit_id, submissions, n):
           dest = os.path.join(tmp, filename)
           log.write("    fetching patch %s\n" % patch)
           log.flush()
-          urllib.urlretrieve(patch, dest)
-          time.sleep(SLOW_FETCH_SLEEP)
+          write_file(dest, slow_fetch(patch))
         write_file(os.path.join(tmp, "message_id"), message_id)
         write_file(os.path.join(tmp, "status"), submission.status)
         write_file(os.path.join(tmp, "name"), submission.name)
