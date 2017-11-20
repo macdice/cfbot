@@ -98,7 +98,7 @@ class Submission:
 def slow_fetch(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
      commitfest server."""
-  response = requests.get(url, headers={'User-Agent': USER_AGENT})
+  response = requests.get(url, headers={'User-Agent': USER_AGENT}, timeout=10)
   body = response.content
   response.close()
   time.sleep(SLOW_FETCH_SLEEP)
