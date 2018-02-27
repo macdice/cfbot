@@ -1,5 +1,5 @@
 """ Just a few utility functions used throughout the project."""
-import urllib2
+import requests
 import time
 import os
 
@@ -11,10 +11,8 @@ USER_AGENT = "cfbot from http://commitfest.cputube.org"
 def slow_fetch(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
      commitfest server."""
-  opener = urllib2.build_opener()
-  opener.addheaders = [('User-Agent', USER_AGENT)]
-  response = opener.open(url)
-  body = response.read()
+  response = requests.get(url, headers={'User-Agent': USER_AGENT}, timeout=10)
+  body = response.content
   response.close()
   time.sleep(SLOW_FETCH_SLEEP)
   return body

@@ -1,8 +1,6 @@
 """A submission in a Commitfest."""
 
-import urllib
 import urlparse
-import urllib2
 import re
 import os
 import subprocess
@@ -107,7 +105,7 @@ class Submission:
           dest = os.path.join(tmp, filename)
           log.write("    fetching patch %s\n" % patch)
           log.flush()
-          urllib.urlretrieve(patch, dest)
+          write_file(dest, slow_fetch(patch))
           time.sleep(SLOW_FETCH_SLEEP)
         write_file(os.path.join(tmp, "message_id"), message_id)
         write_file(os.path.join(tmp, "status"), self.status)
