@@ -3,10 +3,7 @@ import requests
 import time
 import os
 
-# politeness settings
-SLOW_FETCH_SLEEP = 1.0
-
-USER_AGENT = "cfbot from http://commitfest.cputube.org"
+from config import *
 
 def slow_fetch(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
