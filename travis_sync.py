@@ -2,14 +2,10 @@
 #
 # Poll travis-ci.org's API to fetch build results.
 
+import cfbot_config
 import cfbot_util
 import json
 import psycopg2
-
-# TODO put all this config stuff somewhere decent
-DSN="dbname=cfbot"
-TRAVIS_API_BUILDS="https://api.travis-ci.org/repos/macdice/postgres/builds"
-TRAVIS_BUILD_URL="https://travis-ci.org/macdice/postgres/builds/%s"
 
 def poll_travis(conn):
   travis_builds = None
@@ -25,7 +21,7 @@ def poll_travis(conn):
     # lazily fetch data from travis only when we first need it
     if travis_builds == None:
        travis_builds = {}
-       for item in json.loads(cfbot_util.slow_fetch(TRAVIS_API_BUILDS)):
+       for item in json.loads(cfbot_util.slow_fetch(cfbot_config.TRAVIS_API_BUILDS)):
          print item
          travis_builds[(item["branch"], item["commit"])] = (item["result"], item["id"])
     branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
@@ -36,16 +32,16 @@ def poll_travis(conn):
         result = "success"
       else:
         result = "failure"
-      url = TRAVIS_BUILD_URL % build_id
-      cursor.execute("""UPDATE submission
+      url = cfbot_config.TRAVIS_BUILD_URL % build_id
+      cursor.execute("""UPDATE build_result
                            SET result = %s,
                                url = %s,
                                modified = now()
                          WHERE id = %s""",
                      (result, url, id))
       conn.commit()
-                      
+
 if __name__ == "__main__":
-  conn = psycopg2.connect(DSN)
-  poll_travis(conn)
-  conn.close()
+  print cfbot_config.TRAVIS_API_BUILDS
+  with psycopg2.connect(cfbot_config.DSN) as conn:
+    poll_travis(conn)

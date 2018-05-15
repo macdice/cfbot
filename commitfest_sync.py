@@ -4,10 +4,9 @@
 # do any other work, it just updates our "submission" table with information
 # about the lastest message for each entry, creating rows as required.
 
+import cfbot_config
 import commitfest_rpc
 import psycopg2
-
-DSN="dbname=cfbot"
 
 def poll_commitfest(conn, commitfest_id):
   """Fetch the list of submissions and make sure we have a row for each one.
@@ -64,10 +63,12 @@ def poll_modified_threads(conn):
                     (last_email_time, message_id, commitfest_id, submission_id))
     conn.commit()
 
-if __name__ == "__main__":
-  conn = psycopg2.connect(DSN)
+def run(conn):
   commitfest_id = commitfest_rpc.get_current_commitfest_id()
   poll_commitfest(conn, commitfest_id)
   poll_commitfest(conn, commitfest_id + 1)
   poll_modified_threads(conn)
-  conn.close()
+
+if __name__ == "__main__":
+  with psycopg2.connect(cfbot_config.DSN) as conn:
+    run(conn)

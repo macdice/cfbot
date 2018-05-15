@@ -30,7 +30,7 @@ class Submission:
     self.last_email_time = last_email_time
 
   def __str__(self):
-    return str([self.id, self.name, self.status, self.authors, self.latest_email])
+    return str([self.id, self.name, self.status, self.authors, self.last_email_time])
 
 def get_latest_patches_from_thread_url(thread_url):
   """Given a 'whole thread' URL from the archives, find the last message that
