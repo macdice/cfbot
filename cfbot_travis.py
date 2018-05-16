@@ -27,12 +27,10 @@ def pull_build_results(conn):
     key = (branch, ci_commit_id)
     if key in builds:
       result, build_id = builds[key]
-      print result
       if result == 0:
         result = "success"
       else:
         result = "failure"
-      print result
       url = cfbot_config.TRAVIS_BUILD_URL % build_id
       cursor.execute("""UPDATE build_result
                            SET result = %s,
