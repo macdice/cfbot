@@ -1,8 +1,7 @@
-#!/usr/bin/env python
-
+import cfbot_config
+import psycopg2
 import requests
 import time
-import cfbot_config
 
 def slow_fetch(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
@@ -12,3 +11,7 @@ def slow_fetch(url):
   response.close()
   time.sleep(cfbot_config.SLOW_FETCH_SLEEP)
   return body
+
+def db():
+  """Get a database connection."""
+  return psycopg2.connect(cfbot_config.DSN)

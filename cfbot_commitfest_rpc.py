@@ -28,6 +28,7 @@ class Submission:
     self.status = status
     self.authors = authors
     self.last_email_time = last_email_time
+    self.build_results = []
 
   def __str__(self):
     return str([self.id, self.name, self.status, self.authors, self.last_email_time])
@@ -65,7 +66,7 @@ def get_latest_patches_from_thread_url(thread_url):
   return selected_message_id, selected_message_attachments
 
 def get_thread_url_for_submission(commitfest_id, submission_id):
-  """Given a commitfest ID and a submission ID, return the URL of the 'whole
+  """Given a Commitfest ID and a submission ID, return the URL of the 'whole
      thread' page in the mailing list archives."""
   # if there is more than one, we'll take the furthest down on the page...
   # TODO: look at the dates instead!
@@ -78,7 +79,7 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
   return result
   
 def get_submissions_for_commitfest(commitfest_id):
-  """Given a commitfest ID, return a list of Submission objects."""
+  """Given a Commitfest ID, return a list of Submission objects."""
   result = []
   parser = HTMLParser.HTMLParser()
   url = "https://commitfest.postgresql.org/%s/" % (commitfest_id,)
@@ -119,7 +120,7 @@ def get_submissions_for_commitfest(commitfest_id):
   return result
 
 def get_current_commitfest_id():
-  """Find the ID of the current open or next future commitfest."""
+  """Find the ID of the current open or next future Commitfest."""
   result = None
   for line in cfbot_util.slow_fetch("https://commitfest.postgresql.org").splitlines():
     groups = re.search('<a href="/([0-9]+)/">[0-9]+-[0-9]+</a> \((Open|In Progress) ', line)
@@ -127,6 +128,8 @@ def get_current_commitfest_id():
       commitfest_id = groups.group(1)
       state = groups.group(2)
       result = int(commitfest_id)
+  if result == None:
+    raise Exception("Could not determine the current Commitfest ID")
   return result
 
 if __name__ == "__main__":

@@ -11,18 +11,15 @@
 # 3.  If we can't find any of those, then just rebuild every patch at a rate
 #     that will get though them all every 48 hours, to check for bitrot.
 
-import commitfest_rpc
-import psycopg2
+import cfbot_commitfest_rpc
+import cfbot_config
+import cfbot_util
+import logging
 import os
+import shutil
 import subprocess
 import tempfile
 import urlparse
-
-CONCURRENT_BUILDS = 3
-CYCLE_TIME = 48.0
-
-DSN="dbname=cfbot"
-PATCHBURNER_CTL="./cfbot_patchburner_ctl.sh"
 
 def need_to_limit_rate(conn):
   """Have we pushed too many branches recently?"""
@@ -34,7 +31,7 @@ def need_to_limit_rate(conn):
                       FROM submission
                      WHERE last_branch_time > now() - INTERVAL '15 minutes'""")
   number, = cursor.fetchone()
-  return number >= CONCURRENT_BUILDS
+  return number >= cfbot_config.CONCURRENT_BUILDS
 
 def choose_submission_with_new_patch(conn):
   """Return the ID pair for the submission most deserving, because it has been
@@ -67,7 +64,7 @@ def choose_submission_without_new_patch(conn):
                        AND status IN ('Ready for Committer', 'Needs review')""")
   number, = cursor.fetchone()
   # how many will we need to do per hour to approximate our target rate?
-  target_per_hour = number / CYCLE_TIME
+  target_per_hour = number / cfbot_config.CYCLE_TIME
   # are we currently above or below our target rate?
   cursor.execute("""SELECT COUNT(*)
                       FROM submission
@@ -147,49 +144,67 @@ Author(s): %s
     tmp.write(commit_message)
     tmp.flush()
     subprocess.check_call("""cd %s && git commit -q -F %s""" % (burner_repo_path, tmp.name), shell=True)
+  return branch
 
+def patchburner_ctl(command, want_rcode=False):
+  """Invoke the patchburner control script."""
+  if want_rcode:
+    p = subprocess.Popen("""%s %s""" % (cfbot_config.PATCHBURNER_CTL, command), shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    output = p.stdout.read()
+    rcode = p.wait()
+    return output, rcode
+  else:
+    return subprocess.check_output("%s %s" % (cfbot_config.PATCHBURNER_CTL, command), shell=True)
+    
 def process_submission(conn, commitfest_id, submission_id):
   cursor = conn.cursor()
-  template_repo_path = subprocess.check_output("%s template-repo-path" % PATCHBURNER_CTL, shell=True).strip()
-  burner_repo_path = subprocess.check_output("%s burner-repo-path" % PATCHBURNER_CTL, shell=True).strip()
-  patch_dir = subprocess.check_output("%s burner-patch-path" % PATCHBURNER_CTL, shell=True).strip()
+  template_repo_path = patchburner_ctl("template-repo-path").strip()
+  burner_repo_path = patchburner_ctl("burner-repo-path").strip()
+  patch_dir = patchburner_ctl("burner-patch-path").strip()
   #print "got %s" % update_patchbase_tree()
   commit_id = get_commit_id(template_repo_path)
-  print "processing %d, %d" % (commitfest_id, submission_id)
+  logging.info("processing submission %d, %d" % (commitfest_id, submission_id))
   # create a fresh patchburner jail
-  subprocess.call("""sudo %s destroy""" % (PATCHBURNER_CTL,), shell=True)
-  subprocess.call("""sudo %s create""" % (PATCHBURNER_CTL,), shell=True)
+  patchburner_ctl("destroy")
+  patchburner_ctl("create")
   # find out where to put the patches so the jail can see them
   # fetch the patches from the thread and put them in the patchburner's
   # filesystem
-  thread_url = commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
-  message_id, patch_urls = commitfest_rpc.get_latest_patches_from_thread_url(thread_url)
+  thread_url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
+  message_id, patch_urls = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(thread_url)
   for patch_url in patch_urls:
     parsed = urlparse.urlparse(patch_url)
     filename = os.path.basename(parsed.path)
     dest = os.path.join(patch_dir, filename)
     with open(dest, "w+") as f:
-      f.write(commitfest_rpc.slow_fetch(patch_url))
+      f.write(cfbot_util.slow_fetch(patch_url))
   # apply the patches inside the jail
-  p = subprocess.Popen("""sudo %s apply""" % (PATCHBURNER_CTL,), shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-  output = p.stdout.read()
-  rcode = p.wait()
+  output, rcode = patchburner_ctl("apply", want_rcode=True)
   if rcode != 0:
     # we failed to apply the patches
     insert_build_result(conn, commitfest_id, submission_id, 'apply',
                         message_id, commit_id, None, 'failure', output)
   else:
     # we applied the patch; now make it into a branch with a commit on it
-    # TODO: add the CI control files
-    make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id)
+    # including the CI control files for all enabled providers
+    for d in cfbot_config.CI_PROVIDERS:
+      for f in os.listdir(d):
+        s = os.path.join(d, f)
+        if os.path.isfile(s):
+          shutil.copy(s, os.path.join(burner_repo_path, f))
+    branch = make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id)
+    # push it to the remote monitored repo, if configured
+    if cfbot_config.GIT_REMOTE_NAME:
+      os.environ["GIT_SSH_COMMAND"] = cfbot_config.GIT_SSH_COMMAND
+      subprocess.check_call("cd %s && git push -q -f %s %s" % (burner_repo_path, cfbot_config.GIT_REMOTE_NAME, branch,), shell=True)
+    # record the build status
     ci_commit_id = get_commit_id(burner_repo_path)
     insert_build_result(conn, commitfest_id, submission_id, 'apply',
                         message_id, commit_id, ci_commit_id, 'success', output)
     # create placeholder results for the CI providers (we'll start polling them)
-    insert_build_result(conn, commitfest_id, submission_id, 'travis',
-                        message_id, commit_id, ci_commit_id, None, None)
-    insert_build_result(conn, commitfest_id, submission_id, 'appveyor',
-                        message_id, commit_id, ci_commit_id, None, None)
+    for provider in cfbot_config.CI_PROVIDERS:
+      insert_build_result(conn, commitfest_id, submission_id, provider,
+                          message_id, commit_id, ci_commit_id, None, None)
   # record that we have processed this commit ID and message ID
   cursor.execute("""UPDATE submission
                        SET last_branch_message_id = %s,
@@ -198,12 +213,14 @@ def process_submission(conn, commitfest_id, submission_id):
                      WHERE commitfest_id = %s AND submission_id = %s""",
                  (message_id, commit_id, commitfest_id, submission_id))
   conn.commit()
-  #subprocess.call("""sudo %s destroy""" % (PATCHBURNER_CTL,), shell=True)
-  
-if __name__ == "__main__":
-  conn = psycopg2.connect(DSN)
+  #patchburner_ctl("destroy")
+
+def maybe_process_one(conn):
   if not need_to_limit_rate(conn):
     commitfest_id, submission_id = choose_submission(conn)
     if submission_id:
       process_submission(conn, commitfest_id, submission_id)
-  conn.close()
+ 
+if __name__ == "__main__":
+  with cfbot_util.db() as conn:
+    maybe_process_one(conn)
