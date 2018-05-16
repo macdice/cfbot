@@ -3,8 +3,9 @@
 # Figure out which submission most needs to be pushed into a new branch for
 # building and testing.  Goals:
 #
-# 1.  Don't do anything if we've already pushed 3 branches in the past 15
-#     minutes.  This limits our resource consumption on the CI providers.
+# 1.  Don't do anything if we're still waiting for build results from too
+#     many branches from any given provider.  This limits our resource
+#     consumption.
 # 2.  The top priority is noticing newly posted patches.  So find the least
 #     recent submission whose last message ID has changed since our last
 #     branch.
@@ -23,15 +24,16 @@ import urlparse
 
 def need_to_limit_rate(conn):
   """Have we pushed too many branches recently?"""
-  # It takes about 15 minutes to run our full build on Travis CI, so we can
-  # use that fact to make a stupid approximation of how many we can build
-  # at once.  They hard limit us to 5, let's soft limit ourselves to 3.
+  # Don't let any provider finish up with more than the configured maximum
+  # number of builds still running.
   cursor = conn.cursor()
   cursor.execute("""SELECT COUNT(*)
-                      FROM submission
-                     WHERE last_branch_time > now() - INTERVAL '15 minutes'""")
-  number, = cursor.fetchone()
-  return number >= cfbot_config.CONCURRENT_BUILDS
+                      FROM build_result
+                     WHERE result IS NULL
+                  GROUP BY provider
+	              ORDER BY 1 DESC""")
+  row = cursor.fetchone()
+  return row and row[0] >= cfbot_config.CONCURRENT_BUILDS
 
 def choose_submission_with_new_patch(conn):
   """Return the ID pair for the submission most deserving, because it has been
