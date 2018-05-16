@@ -114,6 +114,7 @@ def insert_build_result(conn, commitfest_id, submission_id, provider,
 
 def make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id):
   branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
+  logging.info("creating branch %s" % branch)
   # blow away the branch if it exists already
   subprocess.call("""cd %s && git branch -q -D %s > /dev/null 2> /dev/null""" % (burner_repo_path, branch), shell=True) # ignore failure
   # create a new one
@@ -195,8 +196,9 @@ def process_submission(conn, commitfest_id, submission_id):
     branch = make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id)
     # push it to the remote monitored repo, if configured
     if cfbot_config.GIT_REMOTE_NAME:
+      logging.info("pushing branch %s" % branch)
       os.environ["GIT_SSH_COMMAND"] = cfbot_config.GIT_SSH_COMMAND
-      subprocess.check_call("cd %s && git push -q -f %s %s" % (burner_repo_path, cfbot_config.GIT_REMOTE_NAME, branch,), shell=True)
+      subprocess.check_call("cd %s && git push -q -f %s %s" % (burner_repo_path, cfbot_config.GIT_REMOTE_NAME, branch), shell=True)
     # record the build status
     ci_commit_id = get_commit_id(burner_repo_path)
     insert_build_result(conn, commitfest_id, submission_id, 'apply',

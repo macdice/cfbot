@@ -2,13 +2,14 @@ import logging
 import sys
 
 # which CI providers are enabled
-#CI_PROVIDERS = ("appveyor", "travis")
-CI_PROVIDERS = ("appveyor",)
+CI_PROVIDERS = ("appveyor", "travis")
 
 # http settings (be polite by identifying ourselves and limited rate)
 SLOW_FETCH_SLEEP = 1.0
 USER_AGENT = "cfbot from http://commitfest.cputube.org"
 TIMEOUT = 10
+
+LOCK_FILE="/tmp/cfbot-lock"
 
 # database settings
 DSN="dbname=cfbot"
@@ -41,4 +42,5 @@ WEB_ROOT="www"
 CFBOT_APPLY_URL="https://cfbot.cputube.org/foo/blip/blap/%s"
 
 # log settings
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(format='%(asctime)s %(message)s', filename="cfbot.log", level=logging.INFO)
+
