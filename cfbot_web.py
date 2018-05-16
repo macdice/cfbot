@@ -134,15 +134,14 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       (
       <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis</a>,
       <a href="https://ci.appveyor.com/project/postgresql-cfbot/postgresql/history">AppVeyor</a>
-      )
-      &rarr;
-      <a href="https://codecov.io/gh/postgresql-cfbot/postgresql/commits">Codecov</a>.
+      ).
       You can find a report for the <a href="index.html">current CF</a>, the
       <a href="next.html">next CF</a> or individual patch authors.
     </p>
-    <p>Current status: %s</p>
+    <p>New features: now building on Windows, and picking up
+    new patches much more quickly than before.</p>
     <table>
-""" % (commitfest_id_for_link, activity_message))
+""" % (commitfest_id_for_link,))
     for submission in submissions:
 
       # skip if we need to filter by commitfest
