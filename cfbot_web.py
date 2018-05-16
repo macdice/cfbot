@@ -182,14 +182,19 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
           html = """<a class="building" href="%s">&#x2981;</div>""" % url
         build_results += "&nbsp;" + html
 
+      # construct patch link
+      patch_html = ""
+      if submission.last_branch_message_id:
+        patch_html = """<a href="https://www.postgresql.org/message-id/%s">patch</a>""" % submission.last_branch_message_id
+
       # write out an entry
       f.write("""
       <tr>
         <td>%s/%s</td>
         <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
         <td>%s</td>
-        <td><a href="https://www.postgresql.org/message-id/%s">patch</a>&nbsp;%s</td>
-""" % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, name, author_links_string, submission.last_branch_message_id, build_results))
+        <td>%s&nbsp;%s</td>
+""" % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, name, author_links_string, patch_html, build_results))
       f.write("""        <td></td>\n""")
       f.write("""        <td></td>\n""")
       f.write("      </tr>\n")
