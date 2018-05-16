@@ -101,16 +101,16 @@ def get_commit_id(repo_dir):
   return subprocess.check_output("cd %s && git show | head -1 | cut -d' ' -f2" % repo_dir, shell=True).strip()
 
 def insert_build_result(conn, commitfest_id, submission_id, provider,
-                        message_id, commit_id, ci_commit_id, result, output):
+                        message_id, commit_id, ci_commit_id, result, url):
   cursor = conn.cursor()
   cursor.execute("""INSERT INTO build_result (commitfest_id, submission_id,
                                               provider, message_id,
                                               master_commit_id, ci_commit_id,
                                               result,
-                                              message, modified, created)
+                                              url, modified, created)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())""",
                  (commitfest_id, submission_id, provider, message_id, commit_id,
-                  ci_commit_id, result, output))
+                  ci_commit_id, result, url))
 
 def make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id):
   branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
@@ -181,10 +181,16 @@ def process_submission(conn, commitfest_id, submission_id):
       f.write(cfbot_util.slow_fetch(patch_url))
   # apply the patches inside the jail
   output, rcode = patchburner_ctl("apply", want_rcode=True)
+  # write the patch output to a public log file
+  log_file = "patch_%d_%d.log" % (commitfest_id, submission_id)
+  with open(os.path.join(cfbot_config.WEB_ROOT, log_file), "w+") as f:
+    f.write(output)
+  log_url = cfbot_config.CFBOT_APPLY_URL % log_file
+  # did "patch" actually succeed?
   if rcode != 0:
     # we failed to apply the patches
     insert_build_result(conn, commitfest_id, submission_id, 'apply',
-                        message_id, commit_id, None, 'failure', output)
+                        message_id, commit_id, log_url, 'failure', log_url)
   else:
     # we applied the patch; now make it into a branch with a commit on it
     # including the CI control files for all enabled providers
@@ -202,7 +208,7 @@ def process_submission(conn, commitfest_id, submission_id):
     # record the build status
     ci_commit_id = get_commit_id(burner_repo_path)
     insert_build_result(conn, commitfest_id, submission_id, 'apply',
-                        message_id, commit_id, ci_commit_id, 'success', output)
+                        message_id, commit_id, ci_commit_id, 'success', log_url)
     # create placeholder results for the CI providers (we'll start polling them)
     for provider in cfbot_config.CI_PROVIDERS:
       insert_build_result(conn, commitfest_id, submission_id, provider,
@@ -215,7 +221,7 @@ def process_submission(conn, commitfest_id, submission_id):
                      WHERE commitfest_id = %s AND submission_id = %s""",
                  (message_id, commit_id, commitfest_id, submission_id))
   conn.commit()
-  #patchburner_ctl("destroy")
+  patchburner_ctl("destroy")
 
 def maybe_process_one(conn):
   if not need_to_limit_rate(conn):

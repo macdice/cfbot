@@ -39,7 +39,7 @@ GIT_REMOTE_NAME="macdice"
 
 # http output
 WEB_ROOT="www"
-CFBOT_APPLY_URL="https://cfbot.cputube.org/foo/blip/blap/%s"
+CFBOT_APPLY_URL="https://cfbot.cputube.org/log/%s"
 
 # log settings
 logging.basicConfig(format='%(asctime)s %(message)s', filename="cfbot.log", level=logging.INFO)
