@@ -29,6 +29,8 @@ def pull_build_results(conn):
       result, build_id = builds[key]
       if result == 0:
         result = "success"
+      elif result == None:
+        result = None
       else:
         result = "failure"
       url = cfbot_config.TRAVIS_BUILD_URL % build_id
