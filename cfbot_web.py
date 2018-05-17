@@ -138,8 +138,9 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       You can find a report for the <a href="index.html">current CF</a>, the
       <a href="next.html">next CF</a> or individual patch authors.
     </p>
-    <p>New features: now building on Windows, and picking up
-    new patches much more quickly than before.</p>
+    <p>Announcing some new features: result links now take you directly to
+    build logs, testing is now done on multiple operating systems, and new
+    patches should be picked up a lot more quickly than before.</p>
     <table>
 """ % (commitfest_id_for_link,))
     for submission in submissions:
