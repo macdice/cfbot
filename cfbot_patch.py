@@ -48,7 +48,7 @@ def choose_submission_with_new_patch(conn):
                       FROM submission
                      WHERE last_message_id IS NOT NULL
                        AND last_message_id IS DISTINCT FROM last_branch_message_id
-                       AND status IN ('Ready for Committer', 'Needs review')
+                       AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
                   ORDER BY last_email_time
                      LIMIT 1""")
   return cursor.fetchone()
@@ -63,7 +63,7 @@ def choose_submission_without_new_patch(conn):
   cursor.execute("""SELECT COUNT(*)
                       FROM submission
                      WHERE last_message_id IS NOT NULL
-                       AND status IN ('Ready for Committer', 'Needs review')""")
+                       AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')""")
   number, = cursor.fetchone()
   # how many will we need to do per hour to approximate our target rate?
   target_per_hour = number / cfbot_config.CYCLE_TIME
@@ -71,7 +71,7 @@ def choose_submission_without_new_patch(conn):
   cursor.execute("""SELECT COUNT(*)
                       FROM submission
                      WHERE last_message_id IS NOT NULL
-                       AND status IN ('Ready for Committer', 'Needs review')
+                       AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
                        AND last_branch_time > now() - INTERVAL '1 hour'""")
   current_rate_per_hour, = cursor.fetchone()
   # is it time yet?
@@ -79,7 +79,7 @@ def choose_submission_without_new_patch(conn):
     cursor.execute("""SELECT commitfest_id, submission_id
                         FROM submission
                        WHERE last_message_id IS NOT NULL
-                         AND status IN ('Ready for Committer', 'Needs review')
+                         AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
                     ORDER BY last_branch_time NULLS FIRST
                        LIMIT 1""")
     return cursor.fetchone()

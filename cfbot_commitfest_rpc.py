@@ -42,7 +42,7 @@ def get_latest_patches_from_thread_url(thread_url):
   message_attachments = []
   message_id = None
   for line in cfbot_util.slow_fetch(thread_url).splitlines():
-    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2))">', line)
+    groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(diff|patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2))">', line)
     if groups:
       message_attachments.append("https://www.postgresql.org" + groups.group(1))
       selected_message_attachments = message_attachments
