@@ -175,11 +175,11 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
         if not url:
           url = "#"
         if build_result.status == "success":
-          html = """<a class="success" href="%s">&#x2714;</div>""" % url
+          html = """<a class="success" href="%s">&#x2714;</a>""" % url
         elif build_result.status == "failure":
-          html = """<a class="failure" href="%s">&#x274c;</div>""" % url
+          html = """<a class="failure" href="%s">&#x274c;</a>""" % url
         else:
-          html = """<a class="building" href="%s">&#x2981;</div>""" % url
+          html = """<a class="building" href="%s">&#x2981;</a>""" % url
         build_results += "&nbsp;" + html
 
       # construct patch link
@@ -193,7 +193,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
         <td>%s/%s</td>
         <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
         <td>%s</td>
-        <td>%s&nbsp;%s</td>
+        <td>%s%s</td>
 """ % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, name, author_links_string, patch_html, build_results))
       f.write("""        <td></td>\n""")
       f.write("""        <td></td>\n""")
