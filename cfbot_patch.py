@@ -51,7 +51,11 @@ def choose_submission_with_new_patch(conn):
                        AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
                   ORDER BY last_email_time
                      LIMIT 1""")
-  return cursor.fetchone()
+  row = cursor.fetchone()
+  if row:
+    return row
+  else:
+    return None, None
 
 def choose_submission_without_new_patch(conn):
   """Return the ID pair for the submission that has been waiting longest for
@@ -82,7 +86,11 @@ def choose_submission_without_new_patch(conn):
                          AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
                     ORDER BY last_branch_time NULLS FIRST
                        LIMIT 1""")
-    return cursor.fetchone()
+    row = cursor.fetchone()
+    if row:
+      return row
+    else:
+      return None, None
   else:
     return None, None
 
