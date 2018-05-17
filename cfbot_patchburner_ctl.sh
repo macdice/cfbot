@@ -97,7 +97,7 @@ for f in \$(find . -name '*.tgz' -o -name '*.tar.gz' -o -name '*.tar.bz2') ; do
 done
 for f in \$(find . -name '*.gz') ; do
   echo "=== expanding \$f"
-  gzip -d \$f
+  gunzip \$f
 done
 for f in \$(find . -name '*.zip') ; do
   echo "=== expanding \$f"
