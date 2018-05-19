@@ -22,15 +22,20 @@ def pull_build_results(conn):
     if builds == None:
        builds = {}
        for item in json.loads(cfbot_util.slow_fetch(cfbot_config.TRAVIS_API_BUILDS)):
-         builds[(item["branch"], item["commit"])] = (item["result"], item["id"])
+         builds[(item["branch"], item["commit"])] = (item["result"], item["state"], item["id"])
     branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
     key = (branch, ci_commit_id)
     if key in builds:
-      result, build_id = builds[key]
+      result, state, build_id = builds[key]
       if result == 0:
         result = "success"
       elif result == None:
-        result = None
+        # no result; normally this means we're done, but...
+        if state == "finished":
+          # if we're finished then this means we timed out
+          result = "failure"
+        else:
+          result = None
       else:
         result = "failure"
       url = cfbot_config.TRAVIS_BUILD_URL % build_id
