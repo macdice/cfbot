@@ -225,12 +225,19 @@ def process_submission(conn, commitfest_id, submission_id):
       insert_build_result(conn, commitfest_id, submission_id, provider,
                           message_id, commit_id, ci_commit_id, None, None)
   # record that we have processed this commit ID and message ID
+  #
+  # Unfortunately we also have to clobber last_message_id to avoid getting
+  # stuck in a loop, because sometimes the commitfest app reports a change
+  # in last email date before the new email is visible in the flat thread (!),
+  # which means that we can miss a new patch.  Doh.  Need something better
+  # here (don't really want to go back to polling threads aggressively...)
   cursor.execute("""UPDATE submission
-                       SET last_branch_message_id = %s,
+                       SET last_message_id = %s,
+                           last_branch_message_id = %s,
                            last_branch_commit_id = %s,
                            last_branch_time = now()
                      WHERE commitfest_id = %s AND submission_id = %s""",
-                 (message_id, commit_id, commitfest_id, submission_id))
+                 (message_id, message_id, commit_id, commitfest_id, submission_id))
   conn.commit()
   patchburner_ctl("destroy")
 
