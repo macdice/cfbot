@@ -9,11 +9,46 @@ import unicodedata
 
 from cfbot_commitfest_rpc import Submission
 
+NEW_SUCCESS = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+  <title>%s</title>
+  <circle cx="26" cy="26" r="25" fill="green"/>
+  <path stroke-width="2" fill="none" stroke="white" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
+</svg>"""
+
+OLD_SUCCESS = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+  <title>%s</title>
+  <circle cx="26" cy="26" r="25" stroke="green" fill="none"/>
+  <path stroke-width="2" fill="none" stroke="green" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
+</svg>"""
+
+NEW_FAILURE = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+  <title>%s</title>
+  <circle cx="26" cy="26" r="25" fill="red"/>
+  <path stroke-width="2" fill="none" stroke="white" d="M17 17 35 35"/>
+  <path stroke-width="2" fill="none" stroke="white" d="M17 35 35 17"/>
+</svg>"""
+
+OLD_FAILURE = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+  <title>%s</title>
+  <circle cx="26" cy="26" r="25" stroke="red" fill="none"/>
+  <path stroke-width="2" fill="none" stroke="red" d="M17 17 35 35"/>
+  <path stroke-width="2" fill="none" stroke="red" d="M17 35 35 17"/>
+</svg>"""
+
+BUIDING = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+  <title>%s</title>
+  <circle cx="26" cy="26" r="25" stroke="blue" fill="none"/>
+</svg>"""
+
 class BuildResult:
-  def __init__(self, provider, status, url):
+  def __init__(self, provider, status, url, recent, change, only):
     self.provider = provider
     self.url = url
     self.status = status
+    self.recent = recent
+    self.change = change
+    self.only = only
+    self.new = False
   
 def load_submissions(conn, commitfest_id):
   results = []
@@ -40,18 +75,33 @@ def load_submissions(conn, commitfest_id):
     submission = Submission(submission_id, commitfest_id, name, status, authors, None)
     submission.last_branch_message_id = last_branch_message_id
     results.append(submission)
-    cursor.execute("""SELECT b.provider, b.result, b.url
+
+    # get latest build status from each provider, and also figure out if it's
+    # new or had a different status in the past 24 hours
+    cursor.execute("""SELECT b.provider, b.result, b.url,
+                             b.modified > now() - interval '24 hours'
                         FROM build_result b
                        WHERE b.commitfest_id = %s
                          AND b.submission_id = %s
                          AND (b.provider = 'apply' OR b.url IS NOT NULL)
-                    ORDER BY b.provider, b.created DESC""",
+                    ORDER BY b.provider, b.modified DESC""",
                    (commitfest_id, submission_id))
-    seen = []
-    for provider, result, url in cursor.fetchall():
+    seen = {}
+    for provider, result, url, recent in cursor.fetchall():
       if provider not in seen:
-        submission.build_results.append(BuildResult(provider, result, url))
-        seen.append(provider)
+        r = BuildResult(provider, result, url, recent, None, True)
+        submission.build_results.append(r)
+        seen[provider] = r
+      else:
+        r = seen[provider]
+        r.only = False # there is more than one result
+        if (recent or r.change == None) and result != r.status:
+          r.change = True
+
+    # figure out if it deserves to be flags as new/interesting
+    for r in submission.build_results:
+      r.new = (r.only or r.change) and r.recent
+
   return results
 
 def rebuild(conn, commitfest_id):
@@ -109,18 +159,6 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
         padding: 1rem 1rem 1rem 0;
         border-bottom: solid 1px rgba(0,0,0,.2);
       }
-      .success {
-        text-decoration: none;
-        color: green;
-      }
-      .failure {
-        text-decoration: none;
-        color: red;
-      }
-      .building {
-        text-decoration: none;
-        color: blue;
-      }
     </style>
   </head>
   <body>
@@ -172,15 +210,27 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # construct build results
       build_results = ""
       for build_result in submission.build_results:
-        url = build_result.url
-        if not url:
-          url = "#"
+        alt = build_result.provider
         if build_result.status == "success":
-          html = """<a class="success" href="%s">&#x2714;</a>""" % url
+          if build_result.new:
+            html = NEW_SUCCESS
+            alt += " success (new)"
+          else:
+            html = OLD_SUCCESS
+            alt += " success"
         elif build_result.status == "failure":
-          html = """<a class="failure" href="%s">&#x274c;</a>""" % url
+          if build_result.new:
+            html = NEW_FAILURE
+            alt += " failure (new)"
+          else:
+            html = OLD_FAILURE
+            alt += " failure"
         else:
-          html = """<a class="building" href="%s">&#x2981;</a>""" % url
+          html = BUILDING
+          alt += " building"
+        html = html % alt
+        if build_result.url:
+          html = """<a href="%s">%s</a>""" % (build_result.url, html)
         build_results += "&nbsp;" + html
 
       # construct patch link
@@ -191,13 +241,12 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # write out an entry
       f.write("""
       <tr>
-        <td>%s/%s</td>
-        <td><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
-        <td>%s</td>
-        <td>%s%s</td>
+        <td width="10%%">%s/%s</td>
+        <td width="50%%"><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
+        <td width="20%%">%s</td>
+        <td width="10%%" align="right">%s</td>
+        <td width="10%%">%s</td>
 """ % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, name, author_links_string, patch_html, build_results))
-      f.write("""        <td></td>\n""")
-      f.write("""        <td></td>\n""")
       f.write("      </tr>\n")
     f.write("""
     </table>
