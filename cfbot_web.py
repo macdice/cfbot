@@ -9,35 +9,36 @@ import unicodedata
 
 from cfbot_commitfest_rpc import Submission
 
-NEW_SUCCESS = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+NEW_SUCCESS = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
   <circle cx="26" cy="26" r="25" fill="green"/>
   <path stroke-width="3" fill="none" stroke="white" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
 </svg>"""
 
-OLD_SUCCESS = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+OLD_SUCCESS = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
   <circle cx="26" cy="26" r="25" stroke="green" fill="none"/>
   <path stroke-width="3" fill="none" stroke="green" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
 </svg>"""
 
-NEW_FAILURE = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+NEW_FAILURE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
   <circle cx="26" cy="26" r="25" fill="red"/>
   <path stroke-width="3" fill="none" stroke="white" d="M17 17 35 35"/>
   <path stroke-width="3" fill="none" stroke="white" d="M17 35 35 17"/>
 </svg>"""
 
-OLD_FAILURE = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+OLD_FAILURE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
   <circle cx="26" cy="26" r="25" stroke="red" fill="none"/>
   <path stroke-width="3" fill="none" stroke="red" d="M17 17 35 35"/>
   <path stroke-width="3" fill="none" stroke="red" d="M17 35 35 17"/>
 </svg>"""
 
-BUILDING = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+BUILDING = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
   <circle cx="26" cy="26" r="25" stroke="blue" fill="none"/>
+  <path d="M26 26 L26 1 A25 25 0 0 1 51 26 Z" fill="blue"/>
 </svg>"""
 
 class BuildResult:
