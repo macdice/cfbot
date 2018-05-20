@@ -144,7 +144,8 @@ It is based on patches submitted to the PostgreSQL mailing lists and
 registered in the PostgreSQL Commitfest application.
 
 This branch will be overwritten each time a new patch version is posted to
-the email thread or the master branch changes.
+the email thread, and also periodically to check for bitrot caused by changes
+on the master branch.
 
 Commitfest entry: https://commitfest.postgresql.org/%s/%s
 Patch(es): https://www.postgresql.org/message-id/%s
