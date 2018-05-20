@@ -35,7 +35,7 @@ OLD_FAILURE = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewB
   <path stroke-width="3" fill="none" stroke="red" d="M17 35 35 17"/>
 </svg>"""
 
-BUIDING = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+BUILDING = """<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
   <circle cx="26" cy="26" r="25" stroke="blue" fill="none"/>
 </svg>"""
