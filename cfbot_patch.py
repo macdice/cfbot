@@ -20,6 +20,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import urlparse
 
 def need_to_limit_rate(conn):
@@ -50,7 +51,6 @@ def choose_submission_with_new_patch(conn):
                      WHERE last_message_id IS NOT NULL
                        AND last_message_id IS DISTINCT FROM last_branch_message_id
                        AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
-                       AND modified < now() - interval '2 minutes'
                   ORDER BY last_email_time
                      LIMIT 1""")
   row = cursor.fetchone()
@@ -184,6 +184,7 @@ def process_submission(conn, commitfest_id, submission_id):
   # find out where to put the patches so the jail can see them
   # fetch the patches from the thread and put them in the patchburner's
   # filesystem
+  time.sleep(10) # argh, try to close race against slow archives
   thread_url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
   message_id, patch_urls = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(thread_url)
   for patch_url in patch_urls:
