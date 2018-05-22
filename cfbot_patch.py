@@ -43,12 +43,14 @@ def choose_submission_with_new_patch(conn):
   # was sent, because it was most likely that message and it seems like a
   # waste of time to use a more accurate time for the message with the
   # attachment
+  # -- wait a couple of minutes before probing because the archives are slow!
   cursor = conn.cursor()
   cursor.execute("""SELECT commitfest_id, submission_id
                       FROM submission
                      WHERE last_message_id IS NOT NULL
                        AND last_message_id IS DISTINCT FROM last_branch_message_id
                        AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
+                       AND modified < now() - interval '2 minutes'
                   ORDER BY last_email_time
                      LIMIT 1""")
   row = cursor.fetchone()
