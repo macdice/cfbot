@@ -12,6 +12,11 @@ def slow_fetch(url):
   time.sleep(cfbot_config.SLOW_FETCH_SLEEP)
   return body
 
+def gc(conn):
+  cursor = conn.cursor()
+  cursor.execute("""DELETE FROM build_result WHERE created < now() - interval '48 hours'""")
+  conn.commit()
+
 def db():
   """Get a database connection."""
   return psycopg2.connect(cfbot_config.DSN)

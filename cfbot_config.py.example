@@ -28,7 +28,7 @@ TRAVIS_BUILD_URL="https://travis-ci.org/" + TRAVIS_USER + "/" + TRAVIS_REPO + "/
 # appveyor settings
 APPVEYOR_USER="macdice"
 APPVEYOR_REPO="postgres"
-APPVEYOR_API_BUILDS="https://ci.appveyor.com/api/projects/"+ APPVEYOR_USER + "/" + APPVEYOR_REPO + "/history?recordsNumber=10"
+APPVEYOR_API_BUILDS="https://ci.appveyor.com/api/projects/"+ APPVEYOR_USER + "/" + APPVEYOR_REPO + "/history?recordsNumber=100"
 APPVEYOR_BUILD_URL="https://ci.appveyor.com/project/"+ APPVEYOR_USER + "/" + APPVEYOR_REPO + "/build/%s"
 
 # git settings

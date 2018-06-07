@@ -47,7 +47,7 @@ def run():
     cfbot_web.rebuild(conn, commitfest_id)
 
     # garbage collect old build results
-    # cfbot_util.gc(conn)
+    cfbot_util.gc(conn)
 
 if __name__ == "__main__":
   # don't run if we're already running
