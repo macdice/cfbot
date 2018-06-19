@@ -176,6 +176,7 @@ def process_submission(conn, commitfest_id, submission_id):
   burner_repo_path = patchburner_ctl("burner-repo-path").strip()
   patch_dir = patchburner_ctl("burner-patch-path").strip()
   #print "got %s" % update_patchbase_tree()
+  update_patchbase_tree(template_repo_path)
   commit_id = get_commit_id(template_repo_path)
   logging.info("processing submission %d, %d" % (commitfest_id, submission_id))
   # create a fresh patchburner jail
