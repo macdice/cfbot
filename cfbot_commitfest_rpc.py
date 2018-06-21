@@ -48,7 +48,8 @@ def get_latest_patches_from_thread_url(thread_url):
       selected_message_attachments = message_attachments
       selected_message_id = message_id
     else:
-      groups = re.search('<a name="([^"]+)"></a>', line)
+      #groups = re.search('<a name="([^"]+)"></a>', line)
+      groups = re.search('<td><a href="/message-id/[^"]+">([^"]+)</a></td>', line)
       if groups:
         message_id = groups.group(1)
         message_attachments = []
