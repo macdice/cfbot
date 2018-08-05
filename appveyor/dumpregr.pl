@@ -12,9 +12,10 @@ sub dump {
     my $path = $File::Find::name;
     print "=== \$path ===\\n";
     open(my $fh, "<", $_) || die "wtf";
-    while (my $line = <$fh>) {
+    for (1..1000) {
+      my $line = <$fh>;
+      last unless defined $line;
       print $line;
-      if ($. > 1000) { last; }
     }
   }
 }
