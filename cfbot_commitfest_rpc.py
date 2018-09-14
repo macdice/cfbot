@@ -69,14 +69,18 @@ def get_latest_patches_from_thread_url(thread_url):
 def get_thread_url_for_submission(commitfest_id, submission_id):
   """Given a Commitfest ID and a submission ID, return the URL of the 'whole
      thread' page in the mailing list archives."""
-  # if there is more than one, we'll take the furthest down on the page...
-  # TODO: look at the dates instead!
+  # find all the threads and latest message times
   result = None
   url = "https://commitfest.postgresql.org/%s/%s/" % (commitfest_id, submission_id)
+  candidates = []
   for line in cfbot_util.slow_fetch(url).splitlines():
-    groups = re.search('<dt><a href="(https://www.postgresql.org/message-id/flat/[^"]+)"', line)
+    groups = re.search("""Latest at <a href="https://www.postgresql.org/message-id/([^/]+)/">([^<]+)</a>""", line)
     if groups:
-      result = groups.group(1)
+      candidates.append((groups.group(2), groups.group(1)))
+  # take the latest one
+  if len(candidates) > 0:
+    candidates.sort()
+    result = "https://www.postgresql.org/message-id/flat/" + candidates[-1][1]
   return result
   
 def get_submissions_for_commitfest(commitfest_id):
@@ -134,5 +138,7 @@ def get_current_commitfest_id():
   return result
 
 if __name__ == "__main__":
-  for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
-    print str(sub)
+  #for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
+  #  print str(sub)
+  #print get_thread_url_for_submission(19, 1787)
+  print get_thread_url_for_submission(15, 994)
