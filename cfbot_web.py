@@ -171,15 +171,16 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
       &rarr;
       (
-      <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis</a>,
-      <a href="https://ci.appveyor.com/project/postgresql-cfbot/postgresql/history">AppVeyor</a>
+      <a href="https://ci.appveyor.com/project/postgresql-cfbot/postgresql/history">AppVeyor</a>,
+      <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis</a>
       ).
       You can find a report for the <a href="index.html">current CF</a>, the
       <a href="next.html">next CF</a> or individual patch authors.
     </p>
-    <p>Announcing some new features: result links now take you directly to
-    build logs, testing is now done on multiple operating systems, and new
-    patches should be picked up a lot more quickly than before.</p>
+    <p>News: Some information about this project and future plans can be seen in the
+    <a href="https://speakerdeck.com/macdice/continuous-integration-for-postgresql-commitfests">slides</a>
+    from my talk at PGCon 2018.  TL;DR: the general plan discussed with the pginfra team is to integrate this into
+    the Commitfest application, and perhaps add one or two more interesting architectures.  May take some time, but watch this space.</p>
     <table>
 """ % (commitfest_id_for_link,))
     for submission in submissions:
