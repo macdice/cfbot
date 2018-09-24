@@ -177,10 +177,11 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       You can find a report for the <a href="index.html">current CF</a>, the
       <a href="next.html">next CF</a> or individual patch authors.
     </p>
-    <p>News: Some information about this project and future plans can be seen in the
-    <a href="https://speakerdeck.com/macdice/continuous-integration-for-postgresql-commitfests">slides</a>
-    from my talk at PGCon 2018.  TL;DR: the general plan discussed with the pginfra team is to integrate this into
-    the Commitfest application, and perhaps add one or two more interesting architectures.  May take some time, but watch this space.</p>
+    <p>News: Some information about this project can be seen in
+    <a href="https://speakerdeck.com/macdice/continuous-integration-for-postgresql-commitfests">these slides</a>
+    from PGCon 2018.  Since then the reliability problem with winbison has been fixed (thanks to David Fetter!)
+    TL;DR: the plan discussed with the pginfra team is to integrate this into
+    the Commitfest application.  May take some time, but watch this space.</p>
     <table>
 """ % (commitfest_id_for_link,))
     for submission in submissions:
