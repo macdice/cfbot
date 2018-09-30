@@ -53,7 +53,10 @@ def pull_modified_threads(conn):
                         OR last_email_time_checked != last_email_time""")
   for commitfest_id, submission_id, last_email_time in cursor:
     url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
-    message_id, attachments = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(url)
+    if url == None:
+      message_id = None
+    else:
+      message_id, attachments = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(url)
     # clear last_branch_message_id because of stupid race with slow updating
     # archives website ... gah, need different state tracking
     cursor2.execute("""UPDATE submission
