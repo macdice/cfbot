@@ -108,7 +108,7 @@ done
 cd /work/postgresql
 for f in \$(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort) ; do
   echo "=== applying patch \$f"
-  patch -p1 -V none -f < "/work/patches/\$f"
+  gpatch -p1 -V none -f < "/work/patches/\$f"
 done
 EOF
   chmod 775 $HOST_ROOT_PATH/work/apply-patches.sh

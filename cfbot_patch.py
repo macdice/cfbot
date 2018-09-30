@@ -199,6 +199,7 @@ def process_submission(conn, commitfest_id, submission_id):
   # write the patch output to a public log file
   log_file = "patch_%d_%d.log" % (commitfest_id, submission_id)
   with open(os.path.join(cfbot_config.WEB_ROOT, log_file), "w+") as f:
+    f.write("=== Applying patches on top of PostgreSQL commit ID %s ===\n" % (commit_id,))
     f.write(output)
   log_url = cfbot_config.CFBOT_APPLY_URL % log_file
   # did "patch" actually succeed?
@@ -254,4 +255,5 @@ def maybe_process_one(conn):
  
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
-    maybe_process_one(conn)
+    #maybe_process_one(conn)
+    process_submission(conn, 19, 1769)
