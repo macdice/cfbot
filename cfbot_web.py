@@ -179,7 +179,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
     </p>
     <p>News: Some information about this project can be seen in
     <a href="https://speakerdeck.com/macdice/continuous-integration-for-postgresql-commitfests">these slides</a>
-    from PGCon 2018.  Since then the reliability problem with winbison has been fixed (thanks to David Fetter!)
+    from PGCon 2018.
     TL;DR: the plan discussed with the pginfra team is to integrate this into
     the Commitfest application.  May take some time, but watch this space.</p>
     <table>
