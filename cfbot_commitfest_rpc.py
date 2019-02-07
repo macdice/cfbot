@@ -93,6 +93,7 @@ def get_submissions_for_commitfest(commitfest_id):
   result = []
   parser = HTMLParser.HTMLParser()
   url = "https://commitfest.postgresql.org/%s/" % (commitfest_id,)
+  next_line_has_version = False
   next_line_has_authors = False
   next_line_has_latest_email = False
   state = None
@@ -103,6 +104,10 @@ def get_submissions_for_commitfest(commitfest_id):
     if groups:
       submission_id = groups.group(1)
       name = parser.unescape(groups.group(2))
+    if next_line_has_version:
+      next_line_has_version = False
+      next_line_has_authors = True
+      continue
     if next_line_has_authors:
       next_line_has_authors = False
       groups = re.search("<td>([^<]*)</td>", line)
@@ -119,7 +124,7 @@ def get_submissions_for_commitfest(commitfest_id):
     groups = re.search('<td><span class="label label-[^"]*">([^<]+)</span></td>', line)
     if groups:
       state = groups.group(1)
-      next_line_has_authors = True
+      next_line_has_version = True
       continue
     groups = re.search('<td style="white-space: nowrap;">.*<br/>.*</td>', line)
     if groups:
@@ -143,7 +148,7 @@ def get_current_commitfest_id():
   return result
 
 if __name__ == "__main__":
-  #for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
-  #  print str(sub)
-  print get_thread_url_for_submission(19, 1787)
+  for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
+    print str(sub)
+  #print get_thread_url_for_submission(19, 1787)
   #print get_thread_url_for_submission(15, 994)
