@@ -75,9 +75,9 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
   candidates = []
   candidate = None
   for line in cfbot_util.slow_fetch(url).splitlines():
-    groups = re.search("""Latest at <a href="https://www.postgresql.org/message-id/([^/]+)/">([^<]+)</a>""", line)
+    groups = re.search("""Latest at <a href="https://www.postgresql.org/message-id/([^"]+)">""", line)
     if groups:
-      candidate = (groups.group(2), groups.group(1))
+      candidate = ("who cares", groups.group(1))
     # we'll only take threads that are followed by evidence that there is at least one attachment
     groups = re.search("""Latest attachment .* <button type="button" """, line)
     if groups:
