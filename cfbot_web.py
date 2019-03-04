@@ -254,7 +254,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
     f.write("""
     </table>
 
-    <p>Please send feedback to thomas.munro-at-enterprisedb.com.</p>
+    <p>Please send feedback to thomas.munro-at-gmail.com.</p>
   </body>
 </html>
 """)
