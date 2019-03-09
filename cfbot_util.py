@@ -14,7 +14,7 @@ def slow_fetch(url):
 
 def gc(conn):
   cursor = conn.cursor()
-  cursor.execute("""DELETE FROM build_result WHERE created < now() - interval '48 hours'""")
+  cursor.execute("""DELETE FROM build_result WHERE created < now() - interval '72 hours'""")
   cursor.execute("""DELETE FROM build_result WHERE created < now() - interval '2 hours' AND result is NULL""")
   conn.commit()
 
