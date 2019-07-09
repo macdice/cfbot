@@ -197,7 +197,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # create a new heading row if this is a new CF status
       status = submission.status
       if last_status == None or last_status != status:
-        f.write("""      <tr><td colspan="6"><h2>%s</h2></td></tr>\n""" % status)
+        f.write("""      <tr><td colspan="5"><h2>%s</h2></td></tr>\n""" % status)
         last_status = status
 
       name = submission.name
