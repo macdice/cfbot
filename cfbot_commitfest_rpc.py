@@ -120,6 +120,8 @@ def get_submissions_for_commitfest(commitfest_id):
       groups = re.search('<td style="white-space: nowrap;">(.*)<br/>(.*)</td>', line)
       if groups:
         latest_email = groups.group(1) + " " + groups.group(2)
+        if latest_email == ' ':
+          latest_email = None
         result.append(Submission(submission_id, commitfest_id, name, state, authors.split(", "), latest_email))
     groups = re.search('<td><span class="label label-[^"]*">([^<]+)</span></td>', line)
     if groups:
