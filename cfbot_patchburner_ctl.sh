@@ -31,7 +31,7 @@ JAIL_NAME=patchburner
 ZFS_NAME=zroot/usr/jails/$JAIL_NAME
 HOST_ROOT_PATH=/usr/jails/$JAIL_NAME
 
-CFBOT_USER=munro
+CFBOT_USER=cfbot
 
 usage()
 {
