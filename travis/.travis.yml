@@ -3,7 +3,9 @@ env:
   - PG_TEST_EXTRA="ssl ldap kerberos"
 addons:
   apt:
-    packages:
+    sources: &common_sources
+      - ubuntu-toolchain-r-test
+    packages: &common_packages
       - gdb
       - lcov
       - libipc-run-perl
@@ -29,7 +31,108 @@ language: c
 cache: ccache
 before_install:
   - echo '/tmp/%e-%s-%p.core' | sudo tee /proc/sys/kernel/core_pattern
-script: ./configure --prefix=$HOME/install --enable-debug --enable-cassert --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-openssl --with-gssapi --with-icu && echo "COPT=-Wall -Werror" > src/Makefile.custom && make -j4 all contrib docs && make install && make check-world
+  - eval "${OVERRIDE_CC}"
+  - eval "${OVERRIDE_CXX}"
+
+matrix:
+  include:
+    # Linux, AMD64, stock GCC
+    - os: linux
+      dist: bionic
+      compiler: gcc
+      env: TYPE=normal
+      addons:
+        apt:
+          sources:
+            - *common_sources
+          packages:
+            - *common_packages
+    # Linux, AMD64, stock GCC with memory debugging
+    - os: linux
+      dist: bionic
+      compiler: gcc
+      env: TYPE=memdebug
+      addons:
+        apt:
+          sources:
+            - *common_sources
+          packages:
+            - *common_packages
+    # Linux, AMD64, GCC 8
+    - os: linux
+      dist: bionic
+      compiler: gcc
+      env:
+        - TYPE=normal
+        - OVERRIDE_CC="CC=gcc-8" OVERRIDE_CXX="CXX=g++-8
+      addons:
+        apt:
+          sources:
+            - *common_sources
+          packages:
+            - *common_packages
+            - gcc-8
+            - g++-8
+    # macOS, AMD64, XCode11 Clang
+    - os: osx
+      compiler: clang
+      osx_image: xcode11
+      env: TYPE=normal
+    # Linux, ARM64, default GCC
+    - os: linux
+      dist: bionic
+      compiler: gcc
+      arch: arm64
+      env: TYPE=normal
+      addons:
+        apt:
+          sources:
+            - *common_sources
+          packages:
+            - *common_packages
+
+script:
+  - |
+      set -eo pipefail
+      if [ "$TYPE" = "normal" ]; then
+        ./configure \
+            --prefix=$HOME/install \
+            --enable-debug \
+            --enable-cassert \
+            --enable-tap-tests \
+            --with-tcl \
+            --with-python \
+            --with-perl \
+            --with-ldap \
+            --with-openssl \
+            --with-gssapi \
+            --with-icu
+        echo "COPT=-Wall -Werror" > src/Makefile.custom
+        make -j4 all contrib docs
+        make install
+        make check-world
+      fi
+  - |
+      set -eo pipefail
+      if [ "$TYPE" = "memdebug" ]; then
+        CFLAGS=-DCACHE_CLOBBER_ALWAYS -DCLOBBER_FREED_MEMORY ./configure \
+            --prefix=$HOME/install \
+            --enable-debug \
+            --enable-cassert \
+            --enable-tap-tests \
+            --with-tcl \
+            --with-python \
+            --with-perl \
+            --with-ldap \
+            --with-openssl \
+            --with-gssapi \
+            --with-icu
+        echo "COPT=-Wall -Werror" > src/Makefile.custom
+        make -j4 all contrib docs
+        make install
+        make check-world
+      fi
+
 after_failure:
   - for f in $(find . -name regression.diffs) ; do echo "========= Contents of $f" ; head -1000 $f ; done
   - for f in $(find . -name install.log) ; do echo "========= Contents of $f" ; tail -100 $f ; done
