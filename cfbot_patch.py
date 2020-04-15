@@ -38,7 +38,7 @@ def need_to_limit_rate(conn):
 
 def choose_submission_with_new_patch(conn):
   """Return the ID pair for the submission most deserving, because it has been
-     waiting the longest amonst submissions that have a new patch
+     waiting the longest amongst submissions that have a new patch
      available."""
   # we'll use the last email time as an approximation of the time the patch
   # was sent, because it was most likely that message and it seems like a
