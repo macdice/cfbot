@@ -10,6 +10,10 @@ before_build:
 build:
   project: pgsql.sln
 
+before_test:
+  - 'perl -p -i.bak -e "s/^test: tablespace/#test: tablespace/" src/test/regress/serial_schedule'
+  - 'perl -p -i.bak -e "s/^test: tablespace/#test: tablespace/" src/test/regress/parallel_schedule'
+
 test_script:
   - cd src\tools\msvc && vcregress check
 
