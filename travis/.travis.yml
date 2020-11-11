@@ -13,6 +13,7 @@ addons:
       - libldap2-dev
       - libicu-dev
       - docbook
+      - docbook-xml
       - docbook-dsssl
       - docbook-xsl
       - libxml2-utils
