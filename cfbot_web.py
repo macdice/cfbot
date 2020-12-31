@@ -166,22 +166,18 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
     <h1>PostgreSQL Patch Tester</h1>
     <p>
       Here lives an experimental bot that does this:
-      <a href="https://commitfest.postgresql.org/%s">Commitfest</a>
+      <a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
       &rarr; 
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
       &rarr;
       (
-      <a href="https://ci.appveyor.com/project/postgresql-cfbot/postgresql/history">AppVeyor</a>,
-      <a href="https://travis-ci.org/postgresql-cfbot/postgresql/branches">Travis</a>
-      ).
-      You can find a report for the <a href="index.html">current CF</a>, the
-      <a href="next.html">next CF</a> or individual patch authors.
+        <a href="https://ci.appveyor.com/project/postgresql-cfbot/postgresql/history">AppVeyor</a>,
+        <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>).  We've just changed CI providers, so expect some teething problems as we learn what works best...
     </p>
-    <p>News: Some information about this project can be seen in
-    <a href="https://speakerdeck.com/macdice/continuous-integration-for-postgresql-commitfests">these slides</a>
-    from PGCon 2018.
-    TL;DR: the plan discussed with the pginfra team is to integrate this into
-    the Commitfest application.  May take some time, but watch this space.</p>
+    <p>
+      <a href="index.html">Current commitfest</a> |
+      <a href="next.html">Next commitfest</a>
+    </p>
     <table>
 """ % (commitfest_id_for_link,))
     for submission in submissions:
@@ -247,8 +243,8 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
         <td width="10%%">%s/%s</td>
         <td width="50%%"><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
         <td width="20%%">%s</td>
-        <td width="10%%" align="right">%s</td>
-        <td width="10%%">%s</td>
+        <td width="5%%" align="right">%s</td>
+        <td width="15%%">%s</td>
 """ % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, name, author_links_string, patch_html, build_results))
       f.write("      </tr>\n")
     f.write("""

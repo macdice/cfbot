@@ -2,6 +2,8 @@
 # patches.  It is not part of the PostgreSQL source tree (though maybe one day
 # it could be), but can be added to any branch for testing.
 
+# cfbot.cputube.org
+
 # ====== FreeBSD ======
 # TODO: backtrace on crash
 # TODO: use ccache and preserve ccache folder
@@ -67,10 +69,9 @@ task:
     - su postgres -c 'make -s check-world' || su postgres -c '( for F in ` find . -name initdb.log -o -name regression.diffs ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
 
 # ====== Windows ======
-# This doesn't work, some problem with msbuild, but it's super close and has
-# worked in the past before some upgrades to the image that I don't understand
-# as a non-Windows person...
-#
+# This doesn't work.  I think it's the wrong version of Visual Studio and/or
+# msbuild, but I don't understand Windows.  Help!
+
 #task:
 #  name: Windows
 #  windows_container:

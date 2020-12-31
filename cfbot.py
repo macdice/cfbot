@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
 import cfbot_appveyor
+import cfbot_cirrus
+import cfbot_travis
+
 import cfbot_commitfest
 import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_patch
-import cfbot_travis
 import cfbot_util
 import cfbot_web
 import fcntl
@@ -29,9 +31,12 @@ def run():
     commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
 
     # pull in any build results that we are waiting for
-    if "appveyor" in cfbot_config.CI_PROVIDERS:
+    if "appveyor" in cfbot_config.CI_MODULES:
       cfbot_appveyor.pull_build_results(conn)
-    if "travis" in cfbot_config.CI_PROVIDERS:
+    if "cirrus" in cfbot_config.CI_MODULES:
+      cfbot_cirrus.pull_build_results(conn)
+    if "travis" in cfbot_config.CI_MODULES:
+      cfbot_travis.pull_build_results(conn)
       cfbot_travis.pull_build_results(conn)
 
     # exchange data with the Commitfest app

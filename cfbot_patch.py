@@ -210,7 +210,7 @@ def process_submission(conn, commitfest_id, submission_id):
   else:
     # we applied the patch; now make it into a branch with a commit on it
     # including the CI control files for all enabled providers
-    for d in cfbot_config.CI_PROVIDERS:
+    for d in cfbot_config.CI_MODULES:
       for f in os.listdir(d):
         s = os.path.join(d, f)
         if os.path.isfile(s):
