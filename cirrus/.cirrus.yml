@@ -65,6 +65,8 @@ task:
   build_script:
     - su postgres -c './configure --enable-cassert --enable-debug --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-openssl --with-icu --with-llvm'
     - su postgres -c 'make -s -j4'
+  docs_script:
+    - su postgres -c 'make docs'
   test_script:
     - su postgres -c 'make -s check-world' || su postgres -c '( for F in ` find . -name initdb.log -o -name regression.diffs ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
 
