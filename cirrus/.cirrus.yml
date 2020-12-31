@@ -1,0 +1,88 @@
+# This is the Cirrus CI control file used by cfbot to test proposed PostgreSQL 
+# patches.  It is not part of the PostgreSQL source tree (though maybe one day
+# it could be), but can be added to any branch for testing.
+
+# ====== FreeBSD ======
+# TODO: backtrace on crash
+# TODO: use ccache and preserve ccache folder
+
+task:
+  name: FreeBSD
+  freebsd_instance:
+    image_family: freebsd-12-1
+  install_script:
+    - uname -a
+    - pkg install -y readline flex bison gmake perl5 p5-IPC-Run
+  create_user_script:
+    - pw useradd postgres
+    - chown -R postgres:postgres .
+  build_script:
+    - su postgres -c './configure --enable-cassert --enable-debug --enable-tap-tests --with-includes=/usr/local/include --with-libs=/usr/local/lib' || su postgres -c '( for F in ` find . -name config.log ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
+    - su postgres -c 'make -s -j4'
+  test_script:
+    - su postgres -c 'make -s check-world' || su postgres -c '( for F in ` find . -name initdb.log -o -name regression.diffs ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
+
+
+# ====== macOS ======
+#
+# TODO: backtrace on crash
+# TODO: Can't run check-world yet because of this:
+#   connection to database failed: Unix-domain socket path "/private/var/folders/3y/l0z1x3693dl_8n0qybp4dqwh0000gn/T/cirrus-ci-build/src/bin/pg_upgrade/.s.PGSQL.58080" is too long (maximum 103 bytes)
+
+task:
+  name: macOS
+  osx_instance:
+    image: catalina-base
+  install_script:
+    - uname -a
+    - cpan -T IPC::Run
+  build_script:
+    - export PERL5LIB=~/perl5/lib/perl5
+    - ./configure --enable-cassert --enable-debug --enable-tap-tests --without-readline
+    - make -s -j4
+  test_script:
+    - export PERL5LIB=~/perl5/lib/perl5
+    - make -s check || ( for F in ` find . -name initdb.log -o -name regression.diffs -o -name postmaster.log` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )
+
+
+# ====== Linux ======
+# TODO: backtrace on crash
+# TODO: use ccache and preserve ccache folder
+
+task:
+  name: Linux
+  container:
+    image: debian:latest
+  install_script:
+    - uname -a
+    - apt-get --yes update
+    - DEBIAN_FRONTEND=noninteractive apt-get --yes install gcc libreadline-dev flex bison make perl libipc-run-perl clang llvm-dev libperl-dev libpython-dev tcl-dev libldap2-dev libicu-dev docbook-xml docbook-xsl fop libxml2-utils xsltproc krb5-admin-server krb5-kdc krb5-user slapd ldap-utils libssl-dev pkg-config locales-all
+  create_user_script:
+    - useradd -m postgres
+    - chown -R postgres:postgres .
+  build_script:
+    - su postgres -c './configure --enable-cassert --enable-debug --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-openssl --with-icu --with-llvm'
+    - su postgres -c 'make -s -j4'
+  test_script:
+    - su postgres -c 'make -s check-world' || su postgres -c '( for F in ` find . -name initdb.log -o -name regression.diffs ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
+
+# ====== Windows ======
+# This doesn't work, some problem with msbuild, but it's super close and has
+# worked in the past before some upgrades to the image that I don't understand
+# as a non-Windows person...
+#
+#task:
+#  name: Windows
+#  windows_container:
+#    image: cirrusci/windowsservercore:cmake
+#  install_script:
+#    - choco install -y winflexbison activeperl diffutils
+#    - rename c:\ProgramData\chocolatey\bin\win_flex.exe flex.exe
+#    - rename c:\ProgramData\chocolatey\bin\win_bison.exe bison.exe
+#    - choco install -y microsoft-build-tools
+#  build_script:
+#    - SET "PATH=%PATH%;C:\Perl64\bin;c:\Program Files (x86)\Microsoft Visual Studio\2017\BuildTools\MSBuild\15.0\Bin"
+#    - perl buildsetup.pl
+#    - msbuild pgsql.sln
+#  test_script:
+#    - cd src\tools\msvc && vcregress check

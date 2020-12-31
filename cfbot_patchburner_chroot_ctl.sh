@@ -119,6 +119,7 @@ for f in \$(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort)
 done
 EOF
   chmod 775 $CHROOT_DIR/work/apply-patches.sh
+  chown -R $RUNAS_USER:$RUNAS_USER $CHROOT_DIR/work
 }
 
 apply_patches_in_patchburner()
