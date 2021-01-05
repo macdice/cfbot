@@ -7,6 +7,7 @@
 # ====== FreeBSD ======
 # TODO: backtrace on crash
 # TODO: use ccache and preserve ccache folder
+# TODO: add more build options
 
 task:
   name: FreeBSD
@@ -50,6 +51,7 @@ task:
 # ====== Linux ======
 # TODO: backtrace on crash
 # TODO: use ccache and preserve ccache folder
+# TODO: use a docker image so that we don't have to install all the packages every time
 
 task:
   name: Linux
