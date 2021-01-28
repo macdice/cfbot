@@ -41,12 +41,17 @@ task:
     - cpan -T IPC::Run
   build_script:
     - export PERL5LIB=~/perl5/lib/perl5
-    - ./configure --enable-cassert --enable-debug --enable-tap-tests --without-readline
-    - make -s -j4
+    - ./configure --prefix=$HOME/install --enable-cassert --enable-debug --enable-tap-tests --without-readline
+    - make -s -j12
+    - make -s install
   test_script:
     - export PERL5LIB=~/perl5/lib/perl5
-    - make -s check || ( for F in ` find . -name initdb.log -o -name regression.diffs -o -name postmaster.log` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )
-
+    - ulimit -c unlimited
+    - make -s check
+  on_failure:
+    debug_script:
+      - for F in ` find . -name initdb.log -o -name regression.diffs -o -name postmaster.log` ; do echo === $F === ; head -1000 $F ; done
+      - for corefile in $(find /cores/ -name 'core.*' 2>/dev/null) ; do lldb -c $corefile --batch -o 'thread backtrace all' -o 'quit' ; done
 
 # ====== Linux ======
 # TODO: backtrace on crash
