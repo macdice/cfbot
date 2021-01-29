@@ -172,12 +172,15 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       &rarr;
       (
         <a href="https://ci.appveyor.com/project/postgresql-cfbot/postgresql/history">AppVeyor</a>,
-        <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>).  We've just changed CI providers, so expect some teething problems as we learn what works best...
+        <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a> ).
+        The results appear in the following order: apply, Windows check, FreeBSD check-world, Linux check-world + docs, macOS check.
+        The plan is eventually to show them on the Commitfest app.
     </p>
     <p>
       <a href="index.html">Current commitfest</a> |
       <a href="next.html">Next commitfest</a>
     </p>
+    <p>News: the macOS builds broke, because Cirrus upgraded to powerful new 12 core instances (yay!), but apparently turned on SIP in the process.  So I had to tweak the recipe.  Should now start fixing itself.  -Thomas</p>
     <table>
 """ % (commitfest_id_for_link,))
     for submission in submissions:
