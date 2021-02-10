@@ -26,6 +26,8 @@ task:
   create_user_script:
     - pw useradd postgres
     - chown -R postgres:postgres .
+    - mkdir -p /tmp/ccache_dir
+    - chown -R postgres:postgres /tmp/ccache_dir
   build_script:
     - su postgres -c './configure --enable-cassert --enable-debug --enable-tap-tests --with-includes=/usr/local/include --with-libs=/usr/local/lib CC="ccache cc"'
     - su postgres -c 'make -s -j4'
