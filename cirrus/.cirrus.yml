@@ -22,7 +22,7 @@ task:
     folder: "/tmp/ccache_dir"
   install_script:
     - uname -a
-    - pkg install -y readline flex bison gmake perl5 p5-IPC-Run liblz4
+    - pkg install -y readline flex bison gmake perl5 p5-IPC-Run liblz4 ccache
   create_user_script:
     - pw useradd postgres
     - chown -R postgres:postgres .
