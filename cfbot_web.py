@@ -180,7 +180,6 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       <a href="index.html">Current commitfest</a> |
       <a href="next.html">Next commitfest</a>
     </p>
-    <p>News: the macOS builds broke, because Cirrus upgraded to powerful new 12 core instances (yay!), but apparently turned on SIP in the process.  So I had to tweak the recipe.  Should now start fixing itself.  -Thomas</p>
     <table>
 """ % (commitfest_id_for_link,))
     for submission in submissions:
