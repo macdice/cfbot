@@ -55,7 +55,7 @@ def get_task_results(commit):
     tasks = get_tasks_for_build(build)
     for task in tasks:
       result[task["name"].lower()] = task
-  print(result)
+  #print(result)
   return result
 
 def pull_build_results(conn):
