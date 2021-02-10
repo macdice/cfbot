@@ -4,15 +4,22 @@
 
 # cfbot.cputube.org
 
+env:
+  CIRRUS_CLONE_DEPTH: 1
+
 # ====== FreeBSD ======
 # TODO: backtrace on crash
-# TODO: use ccache and preserve ccache folder
 # TODO: add more build options
 
 task:
   name: FreeBSD
   freebsd_instance:
-    image_family: freebsd-12-1
+    image_family: freebsd-12-2
+  env:
+    CCACHE_SIZE: "500M"
+    CCACHE_DIR: "/tmp/ccache_dir"
+  ccache_cache:
+    folder: "/tmp/ccache_dir"
   install_script:
     - uname -a
     - pkg install -y readline flex bison gmake perl5 p5-IPC-Run liblz4
@@ -20,10 +27,13 @@ task:
     - pw useradd postgres
     - chown -R postgres:postgres .
   build_script:
-    - su postgres -c './configure --enable-cassert --enable-debug --enable-tap-tests --with-includes=/usr/local/include --with-libs=/usr/local/lib' || su postgres -c '( for F in ` find . -name config.log ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
+    - su postgres -c './configure --enable-cassert --enable-debug --enable-tap-tests --with-includes=/usr/local/include --with-libs=/usr/local/lib CC="ccache cc"'
     - su postgres -c 'make -s -j4'
   test_script:
-    - su postgres -c 'make -s check-world' || su postgres -c '( for F in ` find . -name initdb.log -o -name regression.diffs ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
+    - su postgres -c 'make -s check-world'
+  on_failure:
+    debug_script:
+      - for F in ` find . -name initdb.log -o -name regression.diffs -o -name postmaster.log` ; do echo === $F === ; head -1000 $F ; done
 
 
 # ====== macOS ======
