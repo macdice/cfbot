@@ -56,6 +56,7 @@ def run():
 
 if __name__ == "__main__":
   # don't run if we're already running
-  if try_lock():
+  lock_fd = try_lock()
+  if lock_fd:
     run()
-
+    lock_fd.close()
