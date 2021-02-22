@@ -107,7 +107,7 @@ def choose_submission(conn):
 
 def update_patchbase_tree(repo_dir):
   """Pull changes from PostgreSQL master and return the HEAD commit ID."""
-  subprocess.call("cd %s && git checkout . > /dev/null && git clean -fd > /dev/null && git checkout -q master && git pull -q" % repo_dir, shell=True)
+  subprocess.call("cd %s && git checkout . -q > /dev/null && git clean -fd > /dev/null && git checkout -q master && git pull -q" % repo_dir, shell=True)
 
 def get_commit_id(repo_dir):
   return subprocess.check_output("cd %s && git show | head -1 | cut -d' ' -f2" % repo_dir, shell=True).strip()
