@@ -10,6 +10,8 @@ import cfbot_config
 import cfbot_patch
 import cfbot_util
 import cfbot_web
+
+import errno
 import fcntl
 
 def try_lock():
