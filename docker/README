@@ -1,0 +1,2 @@
+This directory contains Dockerfile specifications for creating the custom images
+used by the cfbot testing.
