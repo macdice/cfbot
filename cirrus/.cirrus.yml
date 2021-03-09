@@ -34,8 +34,18 @@ task:
   test_script:
     - su postgres -c 'make -s check-world'
   on_failure:
-    debug_script:
-      - for F in ` find . -name initdb.log -o -name regression.diffs -o -name postmaster.log` ; do echo === $F === ; head -1000 $F ; done
+    initdb_logs_artifacts:
+      path: "**/initdb.log"
+      type: text/plain
+    postmaster_logs_artifacts:
+      path: "**/postmaster.log"
+      type: text/plain
+    regression_diffs_artifacts:
+      path: "**/regression.diffs"
+      type: text/plain
+    tap_test_log_artifacts:
+      path: "**/tmp_check/log/*"
+      type: text/plain
 
 
 # ====== macOS ======
@@ -62,8 +72,19 @@ task:
     - make -s check
   on_failure:
     debug_script:
-      - for F in ` find . -name initdb.log -o -name regression.diffs -o -name postmaster.log` ; do echo === $F === ; head -1000 $F ; done
       - for corefile in $(find /cores/ -name 'core.*' 2>/dev/null) ; do lldb -c $corefile --batch -o 'thread backtrace all' -o 'quit' ; done
+    initdb_logs_artifacts:
+      path: "**/initdb.log"
+      type: text/plain
+    postmaster_logs_artifacts:
+      path: "**/postmaster.log"
+      type: text/plain
+    regression_diffs_artifacts:
+      path: "**/regression.diffs"
+      type: text/plain
+    tap_test_log_artifacts:
+      path: "**/tmp_check/log/*"
+      type: text/plain
 
 # ====== Linux ======
 # TODO: backtrace on crash
@@ -87,7 +108,20 @@ task:
   docs_script:
     - su postgres -c 'make docs'
   test_script:
-    - su postgres -c 'make -s check-world' || su postgres -c '( for F in ` find . -name initdb.log -o -name regression.diffs ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
+    - su postgres -c 'make -s check-world'
+  on_failure:
+    initdb_logs_artifacts:
+      path: "**/initdb.log"
+      type: text/plain
+    postmaster_logs_artifacts:
+      path: "**/postmaster.log"
+      type: text/plain
+    regression_diffs_artifacts:
+      path: "**/regression.diffs"
+      type: text/plain
+    tap_test_log_artifacts:
+      path: "**/tmp_check/log/*"
+      type: text/plain
 
 # ====== Windows ======
 # This doesn't work.  I think it's the wrong version of Visual Studio and/or
