@@ -22,7 +22,7 @@ task:
     folder: "/tmp/ccache_dir"
   install_script:
     - uname -a
-    - pkg install -y readline flex bison gmake perl5 p5-IPC-Run liblz4 ccache
+    - pkg install -y readline flex bison gmake perl5 p5-IPC-Run liblz4 ccache pkgconf
   create_user_script:
     - pw useradd postgres
     - chown -R postgres:postgres .
@@ -50,10 +50,11 @@ task:
     image: catalina-base
   install_script:
     - uname -a
+    - brew install lz4
     - cpan -T IPC::Run
   build_script:
     - export PERL5LIB=~/perl5/lib/perl5
-    - ./configure --prefix=$HOME/install --enable-cassert --enable-debug --enable-tap-tests --without-readline
+    - ./configure --prefix=$HOME/install --enable-cassert --enable-debug --enable-tap-tests --without-readline --with-includes=/usr/local/include --with-libs=/usr/local/libs
     - make -s -j12
     - make -s install
   test_script:
