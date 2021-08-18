@@ -22,7 +22,7 @@ task:
     folder: "/tmp/ccache_dir"
   install_script:
     - uname -a
-    - pkg install -y readline flex bison gmake perl5 p5-IPC-Run liblz4 ccache pkgconf
+    - pkg install -y readline flex bison gmake perl5 p5-IPC-Run liblz4 ccache pkgconf zstd
   create_user_script:
     - pw useradd postgres
     - chown -R postgres:postgres .
@@ -50,7 +50,7 @@ task:
     image: catalina-base
   install_script:
     - uname -a
-    - brew install lz4
+    - brew install lz4 zstd
     - cpan -T IPC::Run
   build_script:
     - export PERL5LIB=~/perl5/lib/perl5
@@ -78,7 +78,7 @@ task:
   install_script:
     - uname -a
     - apt-get --yes update
-    - DEBIAN_FRONTEND=noninteractive apt-get --yes install gcc libreadline-dev flex bison make perl libipc-run-perl clang llvm-dev libperl-dev libpython-dev tcl-dev libldap2-dev libicu-dev docbook-xml docbook-xsl fop libxml2-utils xsltproc krb5-admin-server krb5-kdc krb5-user slapd ldap-utils libssl-dev pkg-config locales-all liblz4-dev
+    - DEBIAN_FRONTEND=noninteractive apt-get --yes install gcc libreadline-dev flex bison make perl libipc-run-perl clang llvm-dev libperl-dev libpython-dev tcl-dev libldap2-dev libicu-dev docbook-xml docbook-xsl fop libxml2-utils xsltproc krb5-admin-server krb5-kdc krb5-user slapd ldap-utils libssl-dev pkg-config locales-all liblz4-dev libzstd-dev
   create_user_script:
     - useradd -m postgres
     - chown -R postgres:postgres .
