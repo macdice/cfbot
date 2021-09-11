@@ -6,7 +6,7 @@
 import cfbot_util
 import datetime
 import errno
-import HTMLParser
+from html.parser import HTMLParser
 import os
 import re
 import requests
@@ -16,7 +16,7 @@ import sys
 import tarfile
 import time
 import unicodedata
-import urlparse
+from urllib.parse import urlparse
 
 class Submission:
   """A submission in a Commitfest."""
@@ -91,7 +91,7 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
 def get_submissions_for_commitfest(commitfest_id):
   """Given a Commitfest ID, return a list of Submission objects."""
   result = []
-  parser = HTMLParser.HTMLParser()
+  parser = HTMLParser()
   url = "https://commitfest.postgresql.org/%s/" % (commitfest_id,)
   next_line_has_version = False
   next_line_has_authors = False
@@ -153,4 +153,4 @@ if __name__ == "__main__":
   #for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
   #  print str(sub)
   #print get_thread_url_for_submission(19, 1787)
-  print get_thread_url_for_submission(23, 1062)
+  print(get_thread_url_for_submission(23, 1062))

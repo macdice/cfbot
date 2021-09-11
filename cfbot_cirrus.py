@@ -28,7 +28,7 @@ def get_builds_for_commit(owner, repo, sha):
     if "searchBuilds" in result and len(result["searchBuilds"]):
         return result["searchBuilds"]
     else:
-		return []
+        return []
 
 def get_tasks_for_build(build_id):
     query = '''

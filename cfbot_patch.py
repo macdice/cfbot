@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-import urlparse
+from urllib.parse import urlparse
 
 def need_to_limit_rate(conn):
   """Have we pushed too many branches recently?"""
@@ -155,7 +155,7 @@ Author(s): %s
 """ % (commitfest_id, submission_id, name, commitfest_id, submission_id, message_id, ", ".join(authors))
   # commit!
   with tempfile.NamedTemporaryFile() as tmp:
-    tmp.write(commit_message)
+    tmp.write(commit_message.encode('utf-8'))
     tmp.flush()
     subprocess.check_call("""cd %s && git commit -q -F %s""" % (burner_repo_path, tmp.name), shell=True)
   return branch
@@ -164,11 +164,11 @@ def patchburner_ctl(command, want_rcode=False):
   """Invoke the patchburner control script."""
   if want_rcode:
     p = subprocess.Popen("""%s %s""" % (cfbot_config.PATCHBURNER_CTL, command), shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    output = p.stdout.read()
+    output = p.stdout.read().decode('utf-8')
     rcode = p.wait()
     return output, rcode
   else:
-    return subprocess.check_output("%s %s" % (cfbot_config.PATCHBURNER_CTL, command), shell=True)
+    return subprocess.check_output("%s %s" % (cfbot_config.PATCHBURNER_CTL, command), shell=True).decode('utf-8')
     
 def process_submission(conn, commitfest_id, submission_id):
   cursor = conn.cursor()
@@ -189,7 +189,7 @@ def process_submission(conn, commitfest_id, submission_id):
   thread_url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
   message_id, patch_urls = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(thread_url)
   for patch_url in patch_urls:
-    parsed = urlparse.urlparse(patch_url)
+    parsed = urlparse(patch_url)
     filename = os.path.basename(parsed.path)
     dest = os.path.join(patch_dir, filename)
     with open(dest, "w+") as f:

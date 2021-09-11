@@ -10,7 +10,7 @@ def slow_fetch(url):
   body = response.content
   response.close()
   time.sleep(cfbot_config.SLOW_FETCH_SLEEP)
-  return body
+  return body.decode('utf-8')
 
 def gc(conn):
   cursor = conn.cursor()

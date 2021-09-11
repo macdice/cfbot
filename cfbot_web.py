@@ -114,7 +114,7 @@ def rebuild(conn, commitfest_id):
 
 def make_author_url(author):
     text = author.strip()
-    text = unicode(text, "utf-8")
+    #text = str(text, "utf-8")
     text = unicodedata.normalize('NFD', text)
     text = text.encode('ascii', 'ignore')
     text = text.decode("utf-8")
