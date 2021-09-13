@@ -73,22 +73,29 @@ task:
 
 task:
   name: Linux
-  container:
+  arm_container:
     image: debian:latest
+    cpu: 4
   install_script:
     - uname -a
     - apt-get --yes update
     - DEBIAN_FRONTEND=noninteractive apt-get --yes install gcc libreadline-dev flex bison make perl libipc-run-perl clang llvm-dev libperl-dev libpython3-dev tcl-dev libldap2-dev libicu-dev docbook-xml docbook-xsl fop libxml2-utils xsltproc krb5-admin-server krb5-kdc krb5-user slapd ldap-utils libssl-dev pkg-config locales-all liblz4-dev libzstd-dev python3-distutils
+  env:
+    CCACHE_SIZE: "4GB"
+    CCACHE_DIR: "/tmp/ccache_dir"
   create_user_script:
     - useradd -m postgres
     - chown -R postgres:postgres .
-  build_script:
+  ccache_cache:
+    folder: "/tmp/ccache_dir"
+  configure_script:
     - su postgres -c './configure --enable-cassert --enable-debug --enable-tap-tests --with-tcl --with-python --with-perl --with-ldap --with-openssl --with-icu --with-llvm'
+  build_script:
     - su postgres -c 'make -s -j4'
   docs_script:
     - su postgres -c 'make docs'
   test_script:
-    - su postgres -c 'make -s check-world' || su postgres -c '( for F in ` find . -name initdb.log -o -name regression.diffs ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
+    - su postgres -c 'make -s check-world -Otarget -j8' || su postgres -c '( for F in ` find . -name initdb.log -o -name regression.diffs ` ; do echo === $F === ; head -1000 $F ; done ; exit 1 )'
 
 # ====== Windows ======
 # This doesn't work.  I think it's the wrong version of Visual Studio and/or

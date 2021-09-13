@@ -180,6 +180,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       <a href="index.html">Current commitfest</a> |
       <a href="next.html">Next commitfest</a>
     </p>
+    <p>News: Trying out running the Linux build on ARM, for more coverage.  Let's see how this goes...</p>
     <table>
 """ % (commitfest_id_for_link,))
     for submission in submissions:
