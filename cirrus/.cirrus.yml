@@ -14,7 +14,7 @@ env:
 task:
   name: FreeBSD
   freebsd_instance:
-    image_family: freebsd-12-2
+    image_family: freebsd-13-0
   env:
     CCACHE_SIZE: "500M"
     CCACHE_DIR: "/tmp/ccache_dir"
@@ -28,11 +28,12 @@ task:
     - chown -R postgres:postgres .
     - mkdir -p /tmp/ccache_dir
     - chown -R postgres:postgres /tmp/ccache_dir
-  build_script:
+  configure_script:
     - su postgres -c './configure --enable-cassert --enable-debug --enable-tap-tests --with-includes=/usr/local/include --with-libs=/usr/local/lib CC="ccache cc"'
+  build_script:
     - su postgres -c 'make -s -j4'
   test_script:
-    - su postgres -c 'make -s check-world'
+    - su postgres -c 'make -s check-world -j8 -Otarget'
   on_failure:
     debug_script:
       - for F in ` find . -name initdb.log -o -name regression.diffs -o -name postmaster.log` ; do echo === $F === ; head -1000 $F ; done
@@ -81,7 +82,7 @@ task:
     - apt-get --yes update
     - DEBIAN_FRONTEND=noninteractive apt-get --yes install gcc libreadline-dev flex bison make perl libipc-run-perl clang llvm-dev libperl-dev libpython3-dev tcl-dev libldap2-dev libicu-dev docbook-xml docbook-xsl fop libxml2-utils xsltproc krb5-admin-server krb5-kdc krb5-user slapd ldap-utils libssl-dev pkg-config locales-all liblz4-dev libzstd-dev python3-distutils
   env:
-    CCACHE_SIZE: "4GB"
+    CCACHE_SIZE: "500M"
     CCACHE_DIR: "/tmp/ccache_dir"
   create_user_script:
     - useradd -m postgres
