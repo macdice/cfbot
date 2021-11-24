@@ -173,14 +173,13 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       (
         <a href="https://ci.appveyor.com/project/postgresql-cfbot/postgresql/history">AppVeyor</a>,
         <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a> ).
-        The results appear in the following order: apply, Windows check, FreeBSD check-world, Linux check-world + docs, macOS check.
+        The results appear in the following order: apply, Windows/amd64 check, FreeBSD/amd64 check-world, Linux/aarch64 check-world + docs, macOS/amd64 check.
         The plan is eventually to show them on the Commitfest app.
     </p>
     <p>
       <a href="index.html">Current commitfest</a> |
       <a href="next.html">Next commitfest</a>
     </p>
-    <p>News: Trying out running the Linux build on ARM, for more coverage.  Let's see how this goes...</p>
     <table>
 """ % (commitfest_id_for_link,))
     for submission in submissions:
