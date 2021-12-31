@@ -73,7 +73,7 @@ def pull_build_results(conn):
         task_id = task["id"]
         name = task["name"]
         status = task["status"]
-        if status == "EXECUTING":
+        if status not in ("FAILED", "ABORTED", "ERRORED", "COMPLETED"):
             keep_polling = True
         url = "https://cirrus-ci.com/task/" + task_id
         cursor.execute("""UPDATE task
