@@ -29,10 +29,8 @@ def need_to_limit_rate(conn):
   # number of builds still running.
   cursor = conn.cursor()
   cursor.execute("""SELECT COUNT(*)
-                      FROM build_result
-                     WHERE result IS NULL
-                  GROUP BY provider
-	              ORDER BY 1 DESC""")
+                      FROM branch
+                     WHERE status = 'testing'""")
   row = cursor.fetchone()
   return row and row[0] >= cfbot_config.CONCURRENT_BUILDS
 
@@ -111,18 +109,6 @@ def update_patchbase_tree(repo_dir):
 
 def get_commit_id(repo_dir):
   return subprocess.check_output("cd %s && git show | head -1 | cut -d' ' -f2" % repo_dir, shell=True).decode('utf-8').strip()
-
-def insert_build_result(conn, commitfest_id, submission_id, provider,
-                        message_id, commit_id, ci_commit_id, result, url):
-  cursor = conn.cursor()
-  cursor.execute("""INSERT INTO build_result (commitfest_id, submission_id,
-                                              provider, message_id,
-                                              master_commit_id, ci_commit_id,
-                                              result,
-                                              url, modified, created)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())""",
-                 (commitfest_id, submission_id, provider, message_id, commit_id,
-                  ci_commit_id, result, url))
 
 def make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id):
   branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
@@ -205,16 +191,10 @@ def process_submission(conn, commitfest_id, submission_id):
   # did "patch" actually succeed?
   if rcode != 0:
     # we failed to apply the patches
-    insert_build_result(conn, commitfest_id, submission_id, 'apply',
-                        message_id, commit_id, log_url, 'failure', log_url)
+    cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, status, url, created, modified) VALUES (%s, %s, 'failed', %s, now(), now())""",
+                   (commitfest_id, submission_id, log_url))
   else:
     # we applied the patch; now make it into a branch with a commit on it
-    # including the CI control files for all enabled providers
-    for d in cfbot_config.CI_MODULES:
-      for f in os.listdir(d):
-        s = os.path.join(d, f)
-        if os.path.isfile(s):
-          shutil.copy(s, os.path.join(burner_repo_path, f))
     branch = make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id)
     # push it to the remote monitored repo, if configured
     if cfbot_config.GIT_REMOTE_NAME:
@@ -222,14 +202,10 @@ def process_submission(conn, commitfest_id, submission_id):
       my_env = os.environ.copy()
       my_env["GIT_SSH_COMMAND"] = cfbot_config.GIT_SSH_COMMAND
       subprocess.check_call("cd %s && git push -q -f %s %s" % (burner_repo_path, cfbot_config.GIT_REMOTE_NAME, branch), env=my_env, shell=True)
-    # record the build status
+    # record the apply status
     ci_commit_id = get_commit_id(burner_repo_path)
-    insert_build_result(conn, commitfest_id, submission_id, 'apply',
-                        message_id, commit_id, ci_commit_id, 'success', log_url)
-    # create placeholder results for the CI providers (we'll start polling them)
-    for provider in cfbot_config.CI_PROVIDERS:
-      insert_build_result(conn, commitfest_id, submission_id, provider,
-                          message_id, commit_id, ci_commit_id, None, None)
+    cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, commit_id, status, url, created, modified) VALUES (%s, %s, %s, 'testing', %s, now(), now())""",
+                   (commitfest_id, submission_id, ci_commit_id, log_url))
   # record that we have processed this commit ID and message ID
   #
   # Unfortunately we also have to clobber last_message_id to avoid getting

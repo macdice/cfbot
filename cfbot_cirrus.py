@@ -46,52 +46,58 @@ def get_tasks_for_build(build_id):
     result = query_cirrus(query, variables)
     return result["build"]["tasks"]
 
-# Build a dict like { "macos": "success", ... }
 def get_task_results(commit):
   result = {}
   builds = get_builds_for_commit(cfbot_config.CIRRUS_USER, cfbot_config.CIRRUS_REPO, commit)
   if len(builds) > 0:
     build = builds[0]["id"]
-    tasks = get_tasks_for_build(build)
-    for task in tasks:
-      result[task["name"].lower()] = task
-  #print(result)
-  return result
+    return get_tasks_for_build(build)
+  return []
 
 def pull_build_results(conn):
   builds = None
   task_results_for_commit = {}
   cursor = conn.cursor()
-  cursor.execute("""SELECT id,
-                           commitfest_id,
+  cursor.execute("""SELECT commitfest_id,
                            submission_id,
-                           ci_commit_id,
-                           substring(provider, 8) as os
-                      FROM build_result
-                     WHERE provider like 'cirrus/%'
-                       AND result IS NULL""")
-  for id, commitfest_id, submission_id, ci_commit_id, os in cursor.fetchall():
-      # avoid fetching the same build multiple times with a little cache
-      if ci_commit_id not in task_results_for_commit:
-          task_results_for_commit[ci_commit_id] = get_task_results(ci_commit_id)
-      task_results = task_results_for_commit[ci_commit_id]
-      if os in task_results:
-        task_id = task_results[os]["id"]
-        status = task_results[os]["status"]
-        if status in ("FAILED", "ABORTED", "ERRORED"):
-          result = "failure"
-        elif status == "COMPLETED":
-          result = "success"
-        else:
-          result = None
+                           commit_id
+                      FROM branch
+                     WHERE status = 'testing'""")
+  for commitfest_id, submission_id, commit_id in cursor.fetchall():
+      keep_polling = False
+      tasks = get_task_results(commit_id)
+      if len(tasks) == 0:
+          keep_polling = True
+          continue
+      for task in get_task_results(commit_id):
+        task_id = task["id"]
+        name = task["name"]
+        status = task["status"]
+        if status == "EXECUTING":
+            keep_polling = True
         url = "https://cirrus-ci.com/task/" + task_id
-        cursor.execute("""UPDATE build_result
-                             SET result = %s,
-                                 url = %s,
+        cursor.execute("""UPDATE task
+                             SET status = %s,
                                  modified = now()
-                           WHERE id = %s""",
-                       (result, url, id))
-        conn.commit()
+                           WHERE commitfest_id = %s
+                             AND submission_id = %s
+                             AND commit_id = %s
+                             AND task_name = %s""",
+                       (status, commitfest_id, submission_id, commit_id, name))
+        if cursor.rowcount == 0:
+          cursor.execute("""INSERT INTO task (commitfest_id, submission_id, task_name, commit_id, status, url, created, modified)
+                            VALUES (%s, %s, %s, %s, %s, %s, now(), now())""",
+                         (commitfest_id, submission_id, name, commit_id, status, url))
+  
+      if not keep_polling:
+        cursor.execute("""UPDATE branch
+                             SET status = 'finished',
+                                 modified = now()
+                           WHERE commitfest_id = %s
+                             AND submission_id = %s
+                             AND commit_id = %s""",
+                       (commitfest_id, submission_id, commit_id))
+  conn.commit()
 
 if __name__ == "__main__":
   with cfbot_util.db() as conn:

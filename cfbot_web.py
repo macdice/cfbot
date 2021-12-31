@@ -42,8 +42,8 @@ BUILDING = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width=
 </svg>"""
 
 class BuildResult:
-  def __init__(self, provider, status, url, recent, change, only):
-    self.provider = provider
+  def __init__(self, task_name, status, url, recent, change, only):
+    self.task_name = task_name
     self.url = url
     self.status = status
     self.recent = recent
@@ -77,26 +77,42 @@ def load_submissions(conn, commitfest_id):
     submission.last_branch_message_id = last_branch_message_id
     results.append(submission)
 
-    # get latest build status from each provider, and also figure out if it's
+    # check if we were able to apply the patch(es); if not,
+    # we'll synthesise a task that represents the apply failure
+    cursor.execute("""SELECT status, url
+                        FROM branch
+                       WHERE commitfest_id = %s
+                         AND submission_id = %s
+                    ORDER BY modified DESC""",
+                    (commitfest_id, submission_id))
+    row = cursor.fetchone()
+    if not row:
+        continue
+    status, url = row
+    if status == 'failed':
+        r = BuildResult("Apply patches", "FAILED", url, False, None, True)
+        submission.build_results.append(r)
+        continue
+
+    # get latest build status from each task, and also figure out if it's
     # new or had a different status in the past 24 hours
-    cursor.execute("""SELECT b.provider, b.result, b.url,
+    cursor.execute("""SELECT b.task_name, b.status, b.url,
                              b.modified > now() - interval '24 hours'
-                        FROM build_result b
+                        FROM task b
                        WHERE b.commitfest_id = %s
                          AND b.submission_id = %s
-                         AND (b.provider = 'apply' OR b.url IS NOT NULL)
-                    ORDER BY b.provider, b.modified DESC""",
+                    ORDER BY b.task_name, b.modified DESC""",
                    (commitfest_id, submission_id))
     seen = {}
-    for provider, result, url, recent in cursor.fetchall():
-      if provider not in seen:
-        r = BuildResult(provider, result, url, recent, None, True)
+    for task_name, status, url, recent in cursor.fetchall():
+      if task_name not in seen:
+        r = BuildResult(task_name, status, url, recent, None, True)
         submission.build_results.append(r)
-        seen[provider] = r
+        seen[task_name] = r
       else:
-        r = seen[provider]
+        r = seen[task_name]
         r.only = False # there is more than one result
-        if (recent or r.change == None) and result != r.status:
+        if (recent or r.change == None) and status != r.status:
           r.change = True
 
     # figure out if it deserves to be flags as new/interesting
@@ -165,16 +181,17 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
   <body>
     <h1>PostgreSQL Patch Tester</h1>
     <p>
-      Here lives an experimental bot that does this:
-      <a href="https://commitfest.postgresql.org/%s">PostgreSQL Commitfest</a>
-      &rarr; 
-      <a href="https://github.com/postgresql-cfbot/postgresql/branches">Github</a>
-      &rarr;
-      (
-        <a href="https://ci.appveyor.com/project/postgresql-cfbot/postgresql/history">AppVeyor</a>,
-        <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a> ).
-        The results appear in the following order: apply, Windows/amd64 check, FreeBSD/amd64 check-world, Linux/aarch64 check-world + docs, macOS/amd64 check.
-        The plan is eventually to show them on the Commitfest app.
+      Here lives an experimental bot that converts email threads that are registered in the
+      <a href="https://commitfest.postgresql.org/%s">Commitfest system</a> into
+      <a href="https://github.com/postgresql-cfbot/postgresql/branches">branches on Github</a>,
+      and collates test results from
+      <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>.
+    </p>
+    <p>
+      News:  Now using the new CI control files in the PostgreSQL source tree, which do
+      much more thorough testing than before (especially on Windows).  See src/tools/ci/README
+      for information.  May take a couple of days to fill up with results; expect some
+      adjustments during the teething period...
     </p>
     <p>
       <a href="index.html">Current commitfest</a> |
@@ -211,30 +228,27 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # construct build results
       build_results = ""
       for build_result in submission.build_results:
-        alt = build_result.provider
-        if build_result.status == "success":
+        alt = build_result.task_name + ": " + build_result.status
+        if build_result.status == "COMPLETED":
           if build_result.new:
+            alt += " (new)"
             html = NEW_SUCCESS
-            alt += " success (new)"
           else:
             html = OLD_SUCCESS
-            alt += " success"
-        elif build_result.status == "failure":
+        elif build_result.status in ("FAILED", "ABORTED", "ERRORED"):
           if build_result.new:
+            alt += " (new)"
             html = NEW_FAILURE
-            alt += " failure (new)"
           else:
             html = OLD_FAILURE
-            alt += " failure"
         else:
           html = BUILDING
-          alt += " building"
         html = html % alt
         if build_result.url:
           html = """<a href="%s">%s</a>""" % (build_result.url, html)
         build_results += "&nbsp;" + html
 
-      # construct patch link
+      # construct email link
       patch_html = ""
       if submission.last_branch_message_id:
         patch_html = """<a href="https://www.postgresql.org/message-id/%s">patch</a>""" % submission.last_branch_message_id

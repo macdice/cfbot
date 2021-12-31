@@ -33,13 +33,11 @@ def run():
     commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
 
     # pull in any build results that we are waiting for
-    if "appveyor" in cfbot_config.CI_MODULES:
-      cfbot_appveyor.pull_build_results(conn)
-    if "cirrus" in cfbot_config.CI_MODULES:
-      cfbot_cirrus.pull_build_results(conn)
-    if "travis" in cfbot_config.CI_MODULES:
-      cfbot_travis.pull_build_results(conn)
-      cfbot_travis.pull_build_results(conn)
+    # XXX would need to aggregate the 'keep_polling' flag if we went
+    # back to supporting multiple providers, or do something smarter,
+    # but considering the plan to double-down on cirrus and switch to
+    # webhooks, not bothering for now
+    cfbot_cirrus.pull_build_results(conn)
 
     # exchange data with the Commitfest app
     cfbot_commitfest.pull_submissions(conn, commitfest_id)
