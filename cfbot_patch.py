@@ -178,8 +178,8 @@ def process_submission(conn, commitfest_id, submission_id):
     parsed = urlparse(patch_url)
     filename = os.path.basename(parsed.path)
     dest = os.path.join(patch_dir, filename)
-    with open(dest, "w+") as f:
-      f.write(cfbot_util.slow_fetch(patch_url))
+    with open(dest, "wb+") as f:
+      f.write(cfbot_util.slow_fetch_binary(patch_url))
   # apply the patches inside the jail
   output, rcode = patchburner_ctl("apply", want_rcode=True)
   # write the patch output to a public log file

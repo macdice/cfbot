@@ -190,8 +190,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
     <p>
       News:  Now using the new CI control files in the PostgreSQL source tree, which do
       much more thorough testing than before (especially on Windows).  See src/tools/ci/README
-      for information.  May take a couple of days to fill up with results; expect some
-      adjustments during the teething period...
+      for information.
     </p>
     <p>
       <a href="index.html">Current commitfest</a> |
