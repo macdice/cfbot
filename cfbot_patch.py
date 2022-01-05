@@ -170,7 +170,6 @@ def update_submission(conn, message_id, commit_id, commitfest_id, submission_id)
                            last_branch_time = now()
                      WHERE commitfest_id = %s AND submission_id = %s""",
                  (message_id, message_id, commit_id, commitfest_id, submission_id))
-  conn.commit()
   
 def process_submission(conn, commitfest_id, submission_id):
   cursor = conn.cursor()
