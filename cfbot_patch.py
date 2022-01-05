@@ -155,7 +155,23 @@ def patchburner_ctl(command, want_rcode=False):
     return output, rcode
   else:
     return subprocess.check_output("%s %s" % (cfbot_config.PATCHBURNER_CTL, command), shell=True).decode('utf-8')
-    
+
+def update_submission(conn, message_id, commit_id, commitfest_id, submission_id):
+  # Unfortunately we also have to clobber last_message_id to avoid getting
+  # stuck in a loop, because sometimes the commitfest app reports a change
+  # in last email date before the new email is visible in the flat thread (!),
+  # which means that we can miss a new patch.  Doh.  Need something better
+  # here (don't really want to go back to polling threads aggressively...)
+  cursor = conn.cursor()
+  cursor.execute("""UPDATE submission
+                       SET last_message_id = %s,
+                           last_branch_message_id = %s,
+                           last_branch_commit_id = %s,
+                           last_branch_time = now()
+                     WHERE commitfest_id = %s AND submission_id = %s""",
+                 (message_id, message_id, commit_id, commitfest_id, submission_id))
+  conn.commit()
+  
 def process_submission(conn, commitfest_id, submission_id):
   cursor = conn.cursor()
   template_repo_path = patchburner_ctl("template-repo-path").strip()
@@ -173,6 +189,12 @@ def process_submission(conn, commitfest_id, submission_id):
   # filesystem
   time.sleep(10) # argh, try to close race against slow archives
   thread_url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
+  if not thread_url:
+    # CF entry with no thread attached?
+    update_submission(conn, None, None, commitfest_id, submission_id)
+    conn.commit()
+    logging.info("skipping submission %s with no thread" % submission_id)
+    return
   message_id, patch_urls = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(thread_url)
   for patch_url in patch_urls:
     parsed = urlparse(patch_url)
@@ -213,13 +235,7 @@ def process_submission(conn, commitfest_id, submission_id):
   # in last email date before the new email is visible in the flat thread (!),
   # which means that we can miss a new patch.  Doh.  Need something better
   # here (don't really want to go back to polling threads aggressively...)
-  cursor.execute("""UPDATE submission
-                       SET last_message_id = %s,
-                           last_branch_message_id = %s,
-                           last_branch_commit_id = %s,
-                           last_branch_time = now()
-                     WHERE commitfest_id = %s AND submission_id = %s""",
-                 (message_id, message_id, commit_id, commitfest_id, submission_id))
+  update_submission(conn, message_id, commit_id, commitfest_id, submission_id)
   conn.commit()
   patchburner_ctl("destroy")
 
