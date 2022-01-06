@@ -47,22 +47,24 @@ def pull_modified_threads(conn):
      that we understand, and remember that."""
   cursor = conn.cursor()
   cursor2 = conn.cursor()
+  # don't look at threads that have changed in the last minute, because the
+  # archives website seems to be a bit "eventually consistent" and it might not
+  # yet show a recent message on the "flat" page
   cursor.execute("""SELECT commitfest_id, submission_id, last_email_time
                       FROM submission
                      WHERE last_email_time_checked IS NULL
-                        OR last_email_time_checked != last_email_time""")
+                        OR (last_email_time_checked != last_email_time AND
+                            last_email_time < now() - interval '1 minutes')""")
   for commitfest_id, submission_id, last_email_time in cursor:
     url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
     if url == None:
       message_id = None
     else:
       message_id, attachments = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(url)
-    # clear last_branch_message_id because of stupid race with slow updating
-    # archives website ... gah, need different state tracking
     cursor2.execute("""UPDATE submission
                           SET last_email_time_checked = %s,
-                              last_message_id = %s,
-                              last_branch_message_id = NULL
+                              last_message_id = %s
+                              --last_branch_message_id = NULL
                         WHERE commitfest_id = %s
                           AND submission_id = %s""",
                     (last_email_time, message_id, commitfest_id, submission_id))
