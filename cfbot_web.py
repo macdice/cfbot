@@ -181,20 +181,16 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
   <body>
     <h1>PostgreSQL Patch Tester</h1>
     <p>
+      <a href="index.html">Current commitfest</a> |
+      <a href="next.html">Next commitfest</a> |
+      <a href="https://wiki.postgresql.org/wiki/Cfbot">FAQ</a>
+    </p>
+    <p>
       Here lives an experimental bot that converts email threads that are registered in the
       <a href="https://commitfest.postgresql.org/%s">Commitfest system</a> into
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">branches on Github</a>,
       and collates test results from
       <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>.
-    </p>
-    <p>
-      News:  Now using the new CI control files in the PostgreSQL source tree, which do
-      much more thorough testing than before (especially on Windows).  See src/tools/ci/README
-      for information.
-    </p>
-    <p>
-      <a href="index.html">Current commitfest</a> |
-      <a href="next.html">Next commitfest</a>
     </p>
     <table>
 """ % (commitfest_id_for_link,))
@@ -264,8 +260,6 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       f.write("      </tr>\n")
     f.write("""
     </table>
-
-    <p>Please send feedback to thomas.munro-at-gmail.com.</p>
   </body>
 </html>
 """)
