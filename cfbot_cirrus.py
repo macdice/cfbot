@@ -78,15 +78,26 @@ def pull_build_results(conn):
         if status not in ("FAILED", "ABORTED", "ERRORED", "COMPLETED"):
             keep_polling = True
         url = "https://cirrus-ci.com/task/" + task_id
-        cursor.execute("""UPDATE task
-                             SET status = %s,
-                                 modified = now()
+        cursor.execute("""SELECT status
+                            FROM task
                            WHERE commitfest_id = %s
                              AND submission_id = %s
                              AND commit_id = %s
                              AND task_name = %s""",
-                       (status, commitfest_id, submission_id, commit_id, name))
-        if cursor.rowcount == 0:
+                       (commitfest_id, submission_id, commit_id, name))
+        row = cursor.fetchone()
+        if row:
+          # only update if status changes, so we can use the modified time
+          if row[0] != status:
+            cursor.execute("""UPDATE task
+                                 SET status = %s,
+                                     modified = now()
+                               WHERE commitfest_id = %s
+                                 AND submission_id = %s
+                                 AND commit_id = %s
+                                 AND task_name = %s""",
+                           (status, commitfest_id, submission_id, commit_id, name))
+        else:
           cursor.execute("""INSERT INTO task (commitfest_id, submission_id, task_name, commit_id, status, url, created, modified)
                             VALUES (%s, %s, %s, %s, %s, %s, now(), now())""",
                          (commitfest_id, submission_id, name, commit_id, status, url))
