@@ -3,6 +3,7 @@
 import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
+import math
 import os
 import re
 import unicodedata
@@ -35,14 +36,25 @@ OLD_FAILURE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" wid
   <path stroke-width="3" fill="none" stroke="red" d="M17 35 35 17"/>
 </svg>"""
 
-BUILDING = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+WAITING_TO_START = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
-  <circle cx="26" cy="26" r="25" stroke="blue" fill="none"/>
-  <path d="M26 26 L26 1 A25 25 0 0 1 51 26 Z" fill="blue"/>
+  <circle cx="26" cy="26" r="25" stroke="gray" fill="none"/>
 </svg>"""
 
+def building(fraction):
+  if fraction > 0.5:
+    large = 1
+  else:
+    large = 0
+  fraction -= 0.25
+  return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+  <title>%%s</title>
+  <circle cx="26" cy="26" r="25" stroke="blue" fill="none"/>
+  <path d="M26 26 L26 1 A25 25 0 %s 1 %s %s Z" fill="blue"/>
+</svg>""" % (large, 26 + 25 * math.cos(math.pi * (fraction * 2)), 26 + 25 * math.sin(math.pi * (fraction * 2)))
+
 class BuildResult:
-  def __init__(self, task_name, status, url, recent, change, only):
+  def __init__(self, task_name, status, url, recent, change, only, age):
     self.task_name = task_name
     self.url = url
     self.status = status
@@ -50,7 +62,21 @@ class BuildResult:
     self.change = change
     self.only = only
     self.new = False
-  
+    self.age = age
+
+def load_expected_runtimes(conn):
+  cursor = conn.cursor()
+  cursor.execute("""SELECT task_name,
+                           EXTRACT(epoch FROM avg(modified - created))
+                      FROM task
+                     WHERE status = 'COMPLETED'
+                       AND created > now() - INTERVAL '1 hour'
+                  GROUP BY 1""")
+  results = {}
+  for task_name, seconds in cursor.fetchall():
+    results[task_name] = seconds
+  return results
+
 def load_submissions(conn, commitfest_id):
   results = []
   cursor = conn.cursor()
@@ -90,23 +116,24 @@ def load_submissions(conn, commitfest_id):
         continue
     status, url = row
     if status == 'failed':
-        r = BuildResult("Apply patches", "FAILED", url, False, None, True)
+        r = BuildResult("Apply patches", "FAILED", url, False, None, True, 0)
         submission.build_results.append(r)
         continue
 
     # get latest build status from each task, and also figure out if it's
     # new or had a different status in the past 24 hours
     cursor.execute("""SELECT b.task_name, b.status, b.url,
-                             b.modified > now() - interval '24 hours'
+                             b.modified > now() - interval '24 hours',
+                             EXTRACT(epoch FROM now() - b.modified)
                         FROM task b
                        WHERE b.commitfest_id = %s
                          AND b.submission_id = %s
                     ORDER BY b.task_name, b.modified DESC""",
                    (commitfest_id, submission_id))
     seen = {}
-    for task_name, status, url, recent in cursor.fetchall():
+    for task_name, status, url, recent, age in cursor.fetchall():
       if task_name not in seen:
-        r = BuildResult(task_name, status, url, recent, None, True)
+        r = BuildResult(task_name, status, url, recent, None, True, age)
         submission.build_results.append(r)
         seen[task_name] = r
       else:
@@ -145,6 +172,7 @@ def all_authors(submission):
 def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activity_message, path):
   """Build a web page that lists all known entries and shows the badges."""
 
+  expected_runtimes = load_expected_runtimes(conn)
   last_status = None
   commitfest_id_for_link = commitfest_id
   if commitfest_id_for_link == None:
@@ -236,8 +264,23 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
             html = NEW_FAILURE
           else:
             html = OLD_FAILURE
+        elif build_result.status in ("CREATED"):
+            html = WAITING_TO_START
         else:
-          html = BUILDING
+          # hocus pocus time prediction
+          if build_result.task_name in expected_runtimes:
+            expected_runtime = expected_runtimes[build_result.task_name]
+          else:
+            expected_runtime = 60 * 30
+          if build_result.age > 0:
+            fraction = build_result.age / expected_runtime
+          else:
+            fraction = 0.1
+          if fraction <= 0:
+            fraction = 0.1
+          if fraction >= 0.9:
+            fraction = 0.9
+          html = building(fraction)
         html = html % alt
         if build_result.url:
           html = """<a href="%s">%s</a>""" % (build_result.url, html)
@@ -273,5 +316,7 @@ def unique_authors(submissions):
 
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
-    commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
-    rebuild(conn, commitfest_id)
+    #rebuild(conn, commitfest_id)
+    #commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
+    submissions = load_submissions(conn, 37)
+    build_page(conn, "x", 37, submissions, None, None, os.path.join(cfbot_config.WEB_ROOT, "index2.html"))
