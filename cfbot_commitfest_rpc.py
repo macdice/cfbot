@@ -43,16 +43,15 @@ def get_latest_patches_from_thread_url(thread_url):
   message_id = None
   for line in cfbot_util.slow_fetch(thread_url).splitlines():
     groups = re.search('<a href="(/message-id/attachment/[^"]*\\.(diff|diff\\.gz|patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2))">', line)
-    if groups:
+    if groups and not groups.group(1).endswith("jabiru_2022-03-28_20-25-16.tar.gz"):
       message_attachments.append("https://www.postgresql.org" + groups.group(1))
       selected_message_attachments = message_attachments
       selected_message_id = message_id
-    else:
-      #groups = re.search('<a name="([^"]+)"></a>', line)
-      groups = re.search('<td><a href="/message-id/[^"]+">([^"]+)</a></td>', line)
-      if groups:
-        message_id = groups.group(1)
-        message_attachments = []
+    #groups = re.search('<a name="([^"]+)"></a>', line)
+    groups = re.search('<td><a href="/message-id/[^"]+">([^"]+)</a></td>', line)
+    if groups:
+      message_id = groups.group(1)
+      message_attachments = []
   # if there is a tarball attachment, there must be only one attachment,
   # otherwise give up on this thread (we don't know how to combine patches and
   # tarballs)
@@ -153,4 +152,4 @@ if __name__ == "__main__":
   #for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
   #  print str(sub)
   #print get_thread_url_for_submission(19, 1787)
-  print(get_thread_url_for_submission(23, 1062))
+  print(get_latest_patches_from_thread_url(get_thread_url_for_submission(37, 2901)))

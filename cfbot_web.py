@@ -70,7 +70,7 @@ def load_expected_runtimes(conn):
                            EXTRACT(epoch FROM avg(modified - created))
                       FROM task
                      WHERE status = 'COMPLETED'
-                       AND created > now() - INTERVAL '1 hour'
+                       AND created > now() - INTERVAL '12 hours'
                   GROUP BY 1""")
   results = {}
   for task_name, seconds in cursor.fetchall():
@@ -289,7 +289,8 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # construct email link
       patch_html = ""
       if submission.last_branch_message_id:
-        patch_html = """<a href="https://www.postgresql.org/message-id/%s">patch</a>""" % submission.last_branch_message_id
+        patch_html = """<a title="Patch email" href="https://www.postgresql.org/message-id/%s">\u2709</a>""" % submission.last_branch_message_id
+      patch_html += """ <a title="Test history" href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql/commitfest/%s/%s">H</a>""" % (submission.commitfest_id, submission.id)
 
       # write out an entry
       f.write("""
