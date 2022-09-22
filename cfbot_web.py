@@ -122,18 +122,19 @@ def load_submissions(conn, commitfest_id):
 
     # get latest build status from each task, and also figure out if it's
     # new or had a different status in the past 24 hours
-    cursor.execute("""SELECT b.task_name, b.status, b.url,
+    cursor.execute("""SELECT b.task_name, b.status, b.url, b.commit_id,
                              b.modified > now() - interval '24 hours',
                              EXTRACT(epoch FROM now() - b.modified)
                         FROM task b
                        WHERE b.commitfest_id = %s
                          AND b.submission_id = %s
-                         AND b.commit_id = %s
                     ORDER BY b.task_name, b.modified DESC""",
-                   (commitfest_id, submission_id, commit_id))
+                   (commitfest_id, submission_id))
     seen = {}
-    for task_name, status, url, recent, age in cursor.fetchall():
+    for task_name, status, url, b_commit_id, recent, age in cursor.fetchall():
       if task_name not in seen:
+        if b_commit_id != commit_id:
+          continue # Ignore tasks whose latest entry is not from the commit_id we want
         r = BuildResult(task_name, status, url, recent, None, True, age)
         submission.build_results.append(r)
         seen[task_name] = r
