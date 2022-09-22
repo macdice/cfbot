@@ -105,16 +105,16 @@ def load_submissions(conn, commitfest_id):
 
     # check if we were able to apply the patch(es); if not,
     # we'll synthesise a task that represents the apply failure
-    cursor.execute("""SELECT status, url
+    cursor.execute("""SELECT commit_id, status, url
                         FROM branch
                        WHERE commitfest_id = %s
                          AND submission_id = %s
-                    ORDER BY modified DESC""",
+                    ORDER BY modified DESC LIMIT 1""",
                     (commitfest_id, submission_id))
     row = cursor.fetchone()
     if not row:
         continue
-    status, url = row
+    commit_id, status, url = row
     if status == 'failed':
         r = BuildResult("Apply patches", "FAILED", url, False, None, True, 0)
         submission.build_results.append(r)
@@ -128,8 +128,9 @@ def load_submissions(conn, commitfest_id):
                         FROM task b
                        WHERE b.commitfest_id = %s
                          AND b.submission_id = %s
+                         AND b.commit_id = %s
                     ORDER BY b.task_name, b.modified DESC""",
-                   (commitfest_id, submission_id))
+                   (commitfest_id, submission_id, commit_id))
     seen = {}
     for task_name, status, url, recent, age in cursor.fetchall():
       if task_name not in seen:
@@ -319,5 +320,5 @@ if __name__ == "__main__":
   with cfbot_util.db() as conn:
     #rebuild(conn, commitfest_id)
     #commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
-    submissions = load_submissions(conn, 37)
-    build_page(conn, "x", 37, submissions, None, None, os.path.join(cfbot_config.WEB_ROOT, "index2.html"))
+    submissions = load_submissions(conn, 39)
+    build_page(conn, "x", 39, submissions, None, None, os.path.join(cfbot_config.WEB_ROOT, "index2.html"))
