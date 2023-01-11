@@ -297,11 +297,11 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # write out an entry
       f.write("""
       <tr>
-        <td width="10%%">%s/%s</td>
-        <td width="45%%"><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
+        <td width="8%%">%s/%s</td>
+        <td width="42%%"><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
         <td width="20%%">%s</td>
         <td width="5%%" align="right">%s</td>
-        <td width="20%%">%s</td>
+        <td width="25%%">%s</td>
 """ % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, name, author_links_string, patch_html, build_results))
       f.write("      </tr>\n")
     f.write("""
