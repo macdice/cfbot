@@ -108,7 +108,11 @@ done
 cd /work/postgresql
 for f in \$(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort) ; do
   echo "=== applying patch \$f"
-  gpatch --no-backup-if-mismatch -p1 -V none -f < "/work/patches/\$f"
+  if ! git am "/work/patches/\$f"; then
+      git am --skip
+      gpatch --no-backup-if-mismatch -p1 -V none -f < "/work/patches/\$f"
+      git commit -am "[PATCH]: \$f"
+  fi
 done
 EOF
   chmod 775 $HOST_ROOT_PATH/work/apply-patches.sh
