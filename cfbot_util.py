@@ -20,9 +20,9 @@ def slow_fetch_binary(url):
 
 def gc(conn):
   cursor = conn.cursor()
-  cursor.execute("""DELETE FROM task WHERE created < now() - interval '1 week'""")
+  cursor.execute("""DELETE FROM task WHERE created < now() - interval '6 months'""")
   cursor.execute("""DELETE FROM task WHERE created < now() - interval '4 hours' AND status = 'EXECUTING'""") #?
-  cursor.execute("""DELETE FROM branch WHERE created < now() - interval '1 week'""")
+  cursor.execute("""DELETE FROM branch WHERE created < now() - interval '6 months'""")
   cursor.execute("""UPDATE branch SET status = 'timeout' WHERE created < now() - interval '2 hours' AND status = 'testing'""")
   # TODO: GC the git tree too!
   conn.commit()
