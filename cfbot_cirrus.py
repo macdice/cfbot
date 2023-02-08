@@ -13,6 +13,42 @@ def query_cirrus(query, variables):
     else:
         raise Exception("Query failed to run by returning code of {}. {}".format(request.status_code, query))
 
+def get_artifacts_for_task(task_id):
+    query = '''
+        query TaskById($id: ID!) { task(id: $id) { id, name, artifacts { files { path } } } }
+        '''
+    variables = dict(id=task_id)
+    result = query_cirrus(query, variables)
+    #print(result)
+    artifacts = result["task"]["artifacts"]
+    paths = []
+    #print(artifacts)
+    for f in artifacts:
+        for p in f["files"]:
+            paths.append(p["path"])
+    return paths
+
+def get_commands_for_task(task_id):
+    query = '''
+        query TaskById($id: ID!) { task(id: $id) { commands { name, type, status, durationInSeconds, logsTail } } }
+        '''
+    variables = dict(id=task_id)
+    result = query_cirrus(query, variables)
+    #print(result)
+    simple_result = []
+    for command in result["task"]["commands"]:
+      name = command["name"]
+      xtype = command["type"]
+      status = command["status"]
+      duration = command["durationInSeconds"]
+      log_lines = command["logsTail"]
+      if log_lines == None:
+          log = ""
+      else:
+          log = "\n".join([line.replace('\x00', '') for line in log_lines])
+      simple_result.append((name, xtype, status, duration, log))
+    return simple_result
+
 def get_builds_for_commit(owner, repo, sha):
     query = '''
         query buildBySha($owner: String!, $repo: String!, $sha: String!) {
@@ -110,8 +146,53 @@ def pull_build_results(conn):
                              AND submission_id = %s
                              AND commit_id = %s""",
                        (commitfest_id, submission_id, commit_id))
+        #for path in get_artifacts_for_task(task_id):
+        #    cursor.execute("""INSERT INTO artifact (commitfest_id, submission_id, task_name, commit_id, path)
+        #                      VALUES (%s, %s, %s, %s, %s)""",
+        #                   (commitfest_id, submission_id, name, commit_id, path))
+        for name, xtype, status, duration, log in get_commands_for_task(task_id):
+          cursor.execute("""INSERT INTO task_command (task_id, name, type, status, duration, log)
+                            VALUES (%s, %s, %s, %s, %s * interval '1 second', %s)""",
+                         (task_id, name, xtype, status, duration, log))
   conn.commit()
 
+def backfill_artifact(conn):
+  cursor = conn.cursor()
+  cursor.execute("""SELECT commitfest_id, submission_id, task_name, commit_id, url
+                      FROM task t
+                     WHERE status = 'FAILED'
+                       AND NOT EXISTS (SELECT *
+                                         FROM artifact a
+                                        WHERE (t.commitfest_id, t.submission_id, t.task_name, t.commit_id) =
+                                              (a.commitfest_id, a.submission_id, a.task_name, a.commit_id))""")
+  for commitfest_id, submission_id, name, commit_id, url in cursor.fetchall():
+    task_id = url.split("/")[-1]
+    for path in get_artifacts_for_task(task_id):
+      cursor.execute("""INSERT INTO artifact (commitfest_id, submission_id, task_name, commit_id, path)
+                        VALUES (%s, %s, %s, %s, %s)""",
+                     (commitfest_id, submission_id, name, commit_id, path))
+    conn.commit()
+
+def backfill_task_command(conn):
+  cursor = conn.cursor()
+  cursor.execute("""SELECT commitfest_id, submission_id, task_name, commit_id, regexp_replace(url, '^.*/', '')
+                      FROM task t
+                     WHERE status IN ('FAILED', 'COMPLETED')
+                       AND NOT EXISTS (SELECT *
+                                         FROM task_command c
+                                        WHERE regexp_replace(url, '^.*/', '') = c.task_id)""")
+  for commitfest_id, submission_id, name, commit_id, task_id in cursor.fetchall():
+    for name, xtype, status, duration, log in get_commands_for_task(task_id):
+      cursor.execute("""INSERT INTO task_command (task_id, name, type, status, duration, log)
+                        VALUES (%s, %s, %s, %s, %s * interval '1 second', %s)""",
+                     (task_id, name, xtype, status, duration, log))
+    conn.commit()
+
+
 if __name__ == "__main__":
+#  print(get_commands_for_task('5646021133336576'))
+#    get_artifacts_for_task('5646021133336576')
   with cfbot_util.db() as conn:
-    pull_build_results(conn)
+    backfill_task_command(conn)
+#    backfill_task_command(conn)
+#    pull_build_results(conn)
