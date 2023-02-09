@@ -113,7 +113,6 @@ def pull_build_results(conn):
             continue    # ignore for now
         if status not in ("FAILED", "ABORTED", "ERRORED", "COMPLETED"):
             keep_polling = True
-        url = "https://cirrus-ci.com/task/" + task_id
         cursor.execute("""SELECT status
                             FROM task
                            WHERE task_id = %s""",
@@ -128,9 +127,9 @@ def pull_build_results(conn):
                                WHERE task_id = %s""",
                            (status, task_id))
         else:
-          cursor.execute("""INSERT INTO task (task_id, commitfest_id, submission_id, task_name, commit_id, status, url, created, modified)
+          cursor.execute("""INSERT INTO task (task_id, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())""",
-                         (task_id, commitfest_id, submission_id, name, commit_id, status, url))
+                         (task_id, commitfest_id, submission_id, name, commit_id, status))
   
       if not keep_polling:
         cursor.execute("""UPDATE branch

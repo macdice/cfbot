@@ -122,7 +122,7 @@ def load_submissions(conn, commitfest_id):
 
     # get latest build status from each task, and also figure out if it's
     # new or had a different status in the past 24 hours
-    cursor.execute("""SELECT b.task_name, b.status, b.url, b.commit_id,
+    cursor.execute("""SELECT b.task_name, b.status, b.task_id, b.commit_id,
                              b.modified > now() - interval '24 hours',
                              EXTRACT(epoch FROM now() - b.modified)
                         FROM task b
@@ -131,7 +131,8 @@ def load_submissions(conn, commitfest_id):
                     ORDER BY b.task_name, b.modified DESC""",
                    (commitfest_id, submission_id))
     seen = {}
-    for task_name, status, url, b_commit_id, recent, age in cursor.fetchall():
+    for task_name, status, task_id, b_commit_id, recent, age in cursor.fetchall():
+      url = "https://cirrus-ci.com/task/" + task_id
       if task_name not in seen:
         if b_commit_id != commit_id:
           continue # Ignore tasks whose latest entry is not from the commit_id we want
