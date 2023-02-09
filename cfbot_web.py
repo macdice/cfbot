@@ -128,7 +128,7 @@ def load_submissions(conn, commitfest_id):
                         FROM task b
                        WHERE b.commitfest_id = %s
                          AND b.submission_id = %s
-                    ORDER BY b.task_name, b.modified DESC""",
+                    ORDER BY b.position, b.modified DESC""",
                    (commitfest_id, submission_id))
     seen = {}
     for task_name, status, task_id, b_commit_id, recent, age in cursor.fetchall():
