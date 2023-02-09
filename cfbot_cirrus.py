@@ -156,10 +156,9 @@ def backfill_artifact(conn):
   cursor.execute("""SELECT commitfest_id, submission_id, task_name, commit_id, task_id
                       FROM task t
                      WHERE status = 'FAILED'
-                       AND task_id IS NOT NULL
                        AND NOT EXISTS (SELECT *
                                          FROM artifact a
-                                        WHERE a.task_id = a.task_id)""")
+                                        WHERE t.task_id = a.task_id)""")
   for commitfest_id, submission_id, name, commit_id, task_id in cursor.fetchall():
     for path, size in get_artifacts_for_task(task_id):
       cursor.execute("""INSERT INTO artifact (task_id, path, size)
@@ -172,7 +171,6 @@ def backfill_task_command(conn):
   cursor.execute("""SELECT commitfest_id, submission_id, task_name, commit_id, task_id
                       FROM task t
                      WHERE status IN ('FAILED', 'COMPLETED')
-                       AND task_id IS NOT NULL
                        AND NOT EXISTS (SELECT *
                                          FROM task_command c
                                         WHERE t.task_id = c.task_id)""")
