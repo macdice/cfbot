@@ -105,7 +105,9 @@ def pull_build_results(conn):
       if len(tasks) == 0:
           keep_polling = True
           continue
+      position = 0
       for task in get_task_results(commit_id):
+        position += 1
         task_id = task["id"]
         name = task["name"]
         status = task["status"]
@@ -127,9 +129,9 @@ def pull_build_results(conn):
                                WHERE task_id = %s""",
                            (status, task_id))
         else:
-          cursor.execute("""INSERT INTO task (task_id, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
+          cursor.execute("""INSERT INTO task (task_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())""",
-                         (task_id, commitfest_id, submission_id, name, commit_id, status))
+                         (task_id, position, commitfest_id, submission_id, name, commit_id, status))
   
       if not keep_polling:
         cursor.execute("""UPDATE branch
