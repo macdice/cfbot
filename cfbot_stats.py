@@ -90,7 +90,7 @@ select t.task_name,
        stddev(extract(epoch from duration)) filter (where created > now() - interval '1 year') as stddev_365
   from task t
   join task_command c using (task_id)
- where c.name in ('configure', 'build', 'test_world', 'check_world')
+ where c.name in ('configure', 'configure_32', 'build', 'build_32', 'test_world', 'test_world_32', 'check_world')
    and t.status = 'COMPLETED'
  group by 1, 2
  order by 1, 2
