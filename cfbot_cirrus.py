@@ -15,7 +15,7 @@ def query_cirrus(query, variables):
 
 def get_artifacts_for_task(task_id):
     query = '''
-        query TaskById($id: ID!) { task(id: $id) { id, name, artifacts { files { path, size } } } }
+        query TaskById($id: ID!) { task(id: $id) { id, name, artifacts { name, files { path, size } } } }
         '''
     variables = dict(id=task_id)
     result = query_cirrus(query, variables)
@@ -25,7 +25,7 @@ def get_artifacts_for_task(task_id):
     #print(artifacts)
     for f in artifacts:
         for p in f["files"]:
-            paths.append((p["path"], p["size"]))
+            paths.append((f["name"], p["path"], p["size"]))
     return paths
 
 def get_commands_for_task(task_id):
@@ -131,16 +131,30 @@ def pull_build_results(conn):
                                WHERE task_id = %s""",
                            (status, task_id))
             # if we reached a final state then it is time to pull down the
-            # artifacts and task commands (= logs)
+            # artifacts and task commands
             if not task_still_running:
-              for path, size in get_artifacts_for_task(task_id):
-                cursor.execute("""INSERT INTO artifact (task_id, path, size)
-                                  VALUES (%s, %s, %s)""",
-                               (task_id, path, size))
+              # fetch the list of artifacts immediately
+              have_artifacts = False
+              for name, path, size in get_artifacts_for_task(task_id):
+                have_artifacts = True
+                cursor.execute("""INSERT INTO artifact (task_id, name, path, size)
+                                  VALUES (%s, %s, %s, %s)
+                                  ON CONFLICT DO NOTHING""",
+                               (task_id, name, path, size))
+              # fetch the artifact bodies later
+              if have_artifacts:
+                cursor.execute("""insert into work_queue (type, data, status)
+                                  values ('fetch-task-artifacts', %s, 'NEW')""",
+                              (task_id,))
+              # likewise for the task commands (steps)
               for name, xtype, status, duration, log in get_commands_for_task(task_id):
                 cursor.execute("""INSERT INTO task_command (task_id, name, type, status, duration, log)
                                   VALUES (%s, %s, %s, %s, %s * interval '1 second', %s)""",
                                (task_id, name, xtype, status, duration, log))
+              # the actual log bodies can be fetched later
+              cursor.execute("""insert into work_queue (type, data, status)
+                                values ('fetch-task-logs', %s, 'NEW')""",
+                            (task_id,))
         else:
           cursor.execute("""INSERT INTO task (task_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())""",
@@ -165,10 +179,11 @@ def backfill_artifact(conn):
                                          FROM artifact a
                                         WHERE t.task_id = a.task_id)""")
   for commitfest_id, submission_id, name, commit_id, task_id in cursor.fetchall():
-    for path, size in get_artifacts_for_task(task_id):
-      cursor.execute("""INSERT INTO artifact (task_id, path, size)
-                        VALUES (%s, %s, %s)""",
-                     (task_id, path, size))
+    for name, path, size in get_artifacts_for_task(task_id):
+      cursor.execute("""INSERT INTO artifact (task_id, name, path, size)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT DO NOTHING""",
+                     (task_id, name, path, size))
     conn.commit()
 
 def backfill_task_command(conn):
@@ -189,9 +204,9 @@ def backfill_task_command(conn):
 
 if __name__ == "__main__":
 #  print(get_commands_for_task('5646021133336576'))
-#    get_artifacts_for_task('5646021133336576')
+#   print(get_artifacts_for_task('5636792221696000'))
   with cfbot_util.db() as conn:
     backfill_artifact(conn)
-    backfill_task_command(conn)
+#    backfill_task_command(conn)
 #    backfill_task_command(conn)
 #    pull_build_results(conn)
