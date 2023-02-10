@@ -100,13 +100,14 @@ def pull_build_results(conn):
                       FROM branch
                      WHERE status = 'testing'""")
   for commitfest_id, submission_id, commit_id in cursor.fetchall():
-      keep_polling = False
+      keep_polling_branch = False
       tasks = get_task_results(commit_id)
       if len(tasks) == 0:
           keep_polling = True
           continue
       position = 0
       for task in get_task_results(commit_id):
+        task_still_running = False
         position += 1
         task_id = task["id"]
         name = task["name"]
@@ -114,7 +115,8 @@ def pull_build_results(conn):
         if status == "PAUSED":
             continue    # ignore for now
         if status not in ("FAILED", "ABORTED", "ERRORED", "COMPLETED"):
-            keep_polling = True
+            keep_polling_branch = True
+            task_still_running = True
         cursor.execute("""SELECT status
                             FROM task
                            WHERE task_id = %s""",
@@ -128,12 +130,23 @@ def pull_build_results(conn):
                                      modified = now()
                                WHERE task_id = %s""",
                            (status, task_id))
+            # if we reached a final state then it is time to pull down the
+            # artifacts and task commands (= logs)
+            if not task_still_running:
+              for path, size in get_artifacts_for_task(task_id):
+                cursor.execute("""INSERT INTO artifact (task_id, path, size)
+                                  VALUES (%s, %s, %s)""",
+                               (task_id, path, size))
+              for name, xtype, status, duration, log in get_commands_for_task(task_id):
+                cursor.execute("""INSERT INTO task_command (task_id, name, type, status, duration, log)
+                                  VALUES (%s, %s, %s, %s, %s * interval '1 second', %s)""",
+                               (task_id, name, xtype, status, duration, log))
         else:
           cursor.execute("""INSERT INTO task (task_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())""",
                          (task_id, position, commitfest_id, submission_id, name, commit_id, status))
   
-      if not keep_polling:
+      if not keep_polling_branch:
         cursor.execute("""UPDATE branch
                              SET status = 'finished',
                                  modified = now()
@@ -141,14 +154,6 @@ def pull_build_results(conn):
                              AND submission_id = %s
                              AND commit_id = %s""",
                        (commitfest_id, submission_id, commit_id))
-        for path, size in get_artifacts_for_task(task_id):
-          cursor.execute("""INSERT INTO artifact (task_id, path, size)
-                            VALUES (%s, %s, %s)""",
-                         (task_id, path, size))
-        for name, xtype, status, duration, log in get_commands_for_task(task_id):
-          cursor.execute("""INSERT INTO task_command (task_id, name, type, status, duration, log)
-                            VALUES (%s, %s, %s, %s, %s * interval '1 second', %s)""",
-                         (task_id, name, xtype, status, duration, log))
   conn.commit()
 
 def backfill_artifact(conn):
@@ -187,6 +192,6 @@ if __name__ == "__main__":
 #    get_artifacts_for_task('5646021133336576')
   with cfbot_util.db() as conn:
     backfill_artifact(conn)
-    #backfill_task_command(conn)
+    backfill_task_command(conn)
 #    backfill_task_command(conn)
 #    pull_build_results(conn)
