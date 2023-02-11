@@ -27,6 +27,9 @@ def highlight_cores(conn, task_id):
     collected = []
     cursor = conn.cursor()
 
+    # prevent concurrency at the task level (should really be per work item type?)
+    cursor.execute("""select from task where task_id = %s for update""", (task_id,))
+
     # just in case we are re-run, remove older core highlights
     cursor.execute("""delete from highlight where task_id = %s and type = 'core'""", (task_id,))
 
@@ -85,6 +88,9 @@ def highlight_cores(conn, task_id):
 
 def highlight_logs(conn, task_id):
     cursor = conn.cursor()
+
+    # prevent concurrency at the task level (should really be per work item type?)
+    cursor.execute("""select from task where task_id = %s for update""", (task_id,))
 
     # just in case we are re-run, remove older san highlights
     cursor.execute("""delete from highlight where task_id = %s and type in ('sanitizer', 'assertion')""", (task_id,))
@@ -149,7 +155,7 @@ def process_one_job(conn):
       cursor.execute("""update work_queue set status = 'FAIL' where id = %s""", (id,))
       id = None
     else:
-      cursor.execute("""update work_queue set lease = now() + interval '5 minutes', status = 'WORK', retries = coalesce(retries + 1, 0) where id = %s""", (id,))
+      cursor.execute("""update work_queue set lease = now() + interval '15 minutes', status = 'WORK', retries = coalesce(retries + 1, 0) where id = %s""", (id,))
     conn.commit()
     if not id:
       return True # done, go around again
