@@ -30,7 +30,7 @@ def get_artifacts_for_task(task_id):
 
 def get_commands_for_task(task_id):
     query = '''
-        query TaskById($id: ID!) { task(id: $id) { commands { name, type, status, durationInSeconds, logsTail } } }
+        query TaskById($id: ID!) { task(id: $id) { commands { name, type, status, durationInSeconds } } }
         '''
     variables = dict(id=task_id)
     result = query_cirrus(query, variables)
@@ -41,12 +41,7 @@ def get_commands_for_task(task_id):
       xtype = command["type"]
       status = command["status"]
       duration = command["durationInSeconds"]
-      log_lines = command["logsTail"]
-      if log_lines == None:
-          log = ""
-      else:
-          log = "\n".join([line.replace('\x00', '') for line in log_lines])
-      simple_result.append((name, xtype, status, duration, log))
+      simple_result.append((name, xtype, status, duration))
     return simple_result
 
 def get_builds_for_commit(owner, repo, sha):
@@ -143,16 +138,16 @@ def pull_build_results(conn):
                                (task_id, name, path, size))
               # fetch the artifact bodies later
               if have_artifacts:
-                cursor.execute("""insert into work_queue (type, data, status)
+                cursor.execute("""insert into work_queue (type, key, status)
                                   values ('fetch-task-artifacts', %s, 'NEW')""",
                               (task_id,))
               # likewise for the task commands (steps)
-              for name, xtype, status, duration, log in get_commands_for_task(task_id):
-                cursor.execute("""INSERT INTO task_command (task_id, name, type, status, duration, log)
-                                  VALUES (%s, %s, %s, %s, %s * interval '1 second', %s)""",
-                               (task_id, name, xtype, status, duration, log))
+              for name, xtype, status, duration in get_commands_for_task(task_id):
+                cursor.execute("""INSERT INTO task_command (task_id, name, type, status, duration)
+                                  VALUES (%s, %s, %s, %s, %s * interval '1 second')""",
+                               (task_id, name, xtype, status, duration))
               # the actual log bodies can be fetched later
-              cursor.execute("""insert into work_queue (type, data, status)
+              cursor.execute("""insert into work_queue (type, key, status)
                                 values ('fetch-task-logs', %s, 'NEW')""",
                             (task_id,))
         else:
