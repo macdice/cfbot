@@ -26,6 +26,7 @@ def binary_to_safe_utf8(bytes):
 def highlight_cores(conn, task_id):
     collected = []
     cursor = conn.cursor()
+    command = None
 
     # prevent concurrency at the task level (should really be per work item type?)
     cursor.execute("""select from task where task_id = %s for update""", (task_id,))
@@ -33,21 +34,22 @@ def highlight_cores(conn, task_id):
     # just in case we are re-run, remove older core highlights
     cursor.execute("""delete from highlight where task_id = %s and type = 'core'""", (task_id,))
 
-    def dump():
-        #cursor = conn.cursor()
-        cursor.execute("""insert into highlight (task_id, type, data) values (%s, 'core', %s)""", (task_id, "\n".join(collected)))
+    def dump(source):
+        cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'core', %s, %s)""", (task_id, source, "\n".join(collected)))
         collected.clear()
 
     # Linux/FreeBSD/macOS have backtraces in the "cores" task command
     state = "none"
-    cursor.execute("""select log from task_command where task_id = %s and name = 'cores'""", (task_id,))
-    for log, in cursor.fetchall():
+    source = None
+    cursor.execute("""select name, log from task_command where task_id = %s and name = 'cores'""", (task_id,))
+    for name, log in cursor.fetchall():
+        source = "command:" + name
         for line in log.splitlines():
             # GDB (Linux, FreeBSD) backtraces start with "Thread N", LLDB (macOS) with "thread #N"
             if re.match(r'.* [Tt]hread #?[0-9]+ ?.*', line):
                 if state == "in-backtrace":
                     # if multiple core files, dump previous one
-                    dump()
+                    dump(source)
                 state = "in-backtrace"
                 continue
             if state == "in-backtrace":
@@ -57,21 +59,22 @@ def highlight_cores(conn, task_id):
                         collected.append(line)
                     else:
                         # that's enough lines for a highlight
-                        dump()
+                        dump(source)
                         state = "none"
     if state == "in-backtrace":
-        dump()
+        dump(source)
 
     # Windows has backtraces in artifact files
     state = "none"
-    cursor.execute("""select body from artifact where task_id = %s and name = 'crashlog'""", (task_id,))
-    for log, in cursor.fetchall():
-        for line in log.splitlines():
+    cursor.execute("""select name, path, body from artifact where task_id = %s and name = 'crashlog'""", (task_id,))
+    for name, path, body, in cursor.fetchall():
+        source = "artifact:" + name + "/" + path
+        for line in body.splitlines():
             # backtraces start like this:
             if re.match(r'Child-SP.*', line):
                 if state == "in-backtrace":
                     # if multiple core files, dump previous one
-                    dump()
+                    dump(source)
                 state = "in-backtrace"
                 continue
             if state == "in-backtrace":
@@ -81,10 +84,10 @@ def highlight_cores(conn, task_id):
                         collected.append(line)
                     else:
                         # that's enough lines for a highlight
-                        dump()
+                        dump(source)
                         state = "none"
     if state == "in-backtrace":
-        dump()
+        dump(source)
 
 def highlight_logs(conn, task_id):
     cursor = conn.cursor()
@@ -92,18 +95,56 @@ def highlight_logs(conn, task_id):
     # prevent concurrency at the task level (should really be per work item type?)
     cursor.execute("""select from task where task_id = %s for update""", (task_id,))
 
-    # just in case we are re-run, remove older san highlights
-    cursor.execute("""delete from highlight where task_id = %s and type in ('sanitizer', 'assertion')""", (task_id,))
+    # just in case we are re-run, remove older highlights of the type we will insert
+    cursor.execute("""delete from highlight where task_id = %s and type in ('sanitizer', 'assertion', 'panic')""", (task_id,))
 
-    # scan all artifact files, as they might container sanitizer or assertion output
-    cursor.execute("""select body from artifact where task_id = %s""", (task_id,))
-    for log, in cursor.fetchall():
-        for line in log.splitlines():
+    # scan all artifact files for patterns we recognise
+    cursor.execute("""select name, path, body from artifact where task_id = %s""", (task_id,))
+    for name, path, body in cursor.fetchall():
+        source = "artifact:" + name + "/" + path
+        for line in body.splitlines():
+            # TODO: put the patterns into a table of precompiled regexes?
             if re.match(r'SUMMARY: .*Sanitizer.*', line):
-                cursor.execute("""insert into highlight (task_id, type, data) values (%s, 'sanitizer', %s)""", (task_id, line))
+                cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'sanitizer', %s, %s)""", (task_id, source, line))
             elif re.match(r'.*TRAP: failed Assert.*', line):
-                cursor.execute("""insert into highlight (task_id, type, data) values (%s, 'assertion', %s)""", (task_id, line))
+                cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'assertion', %s, %s)""", (task_id, source, line))
+            elif re.match(r'.*PANIC: .*', line):
+                cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'panic', %s, %s)""", (task_id, source, line))
 
+def highlight_tests(conn, task_id):
+    cursor = conn.cursor()
+
+    # prevent concurrency at the task level (should really be per work item type?)
+    cursor.execute("""select from task where task_id = %s for update""", (task_id,))
+
+    # just in case we are re-run, remove older highlights of the type we will insert
+    cursor.execute("""delete from highlight where task_id = %s and type in ('regress', 'isolation', 'tap')""", (task_id,))
+
+    # XXX why do we use different names on Windows and *nix?
+    cursor.execute("""select name, log from task_command where task_id = %s and name in ('test_world', 'check_world')""", (task_id,))
+    for name, log in cursor.fetchall():
+        source = "command:" + name
+        in_tap_summary = False
+        collected_tap = []
+
+        def dump_tap(source):
+            if len(collected_tap) > 0:
+                cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'tap', %s, %s)""", (task_id, source, "\n".join(collected_tap)))
+                collected_tap.clear()
+
+        for line in log.splitlines():
+            if re.match(r'.*Summary of Failures:', line):
+                dump_tap(source)
+                in_tap_summary = True
+                continue
+            if in_tap_summary:
+                if re.match(r'.* postgresql:[^ ]+ / [^ ]+ *', line):
+                    collected_tap.append(line)
+                elif re.match(r'.*Expected Fail:.*', line):
+                    dump_tap(source)
+                    in_tap_summary = False
+        dump_tap(source)
+ 
 def fetch_task_logs(conn, task_id):
     cursor = conn.cursor()
     cores = False
@@ -119,7 +160,7 @@ def fetch_task_logs(conn, task_id):
     # if we just pulled down 'cores' log (where backtraces show up on
     # Linux/FreeBSD/macOS), create a new job to scan it for highlights
     if cores:
-      cursor.execute("""insert into work_queue (type, data, status) values ('highlight-cores', %s, 'NEW')""", (task_id,))
+      cursor.execute("""insert into work_queue (type, key, status) values ('highlight-cores', %s, 'NEW')""", (task_id,))
 
 def fetch_task_artifacts(conn, task_id):
     cursor = conn.cursor()
@@ -131,26 +172,26 @@ def fetch_task_artifacts(conn, task_id):
       if name == "crashlog":
         cores = True
       url = "https://api.cirrus-ci.com/v1/artifact/task/%s/%s/%s" % (task_id, name, path)
-      print(url)
+      #print(url)
       log = binary_to_safe_utf8(cfbot_util.slow_fetch_binary(url))
       cursor.execute("""update artifact set body = %s where task_id = %s and name = %s and path = %s""", (log, task_id, name, path))
 
     # if we pulled down any "crashlog" artifacts (where backtraces show up on
     # Windows), create a new job to scan it for highlights
     if cores:
-      cursor.execute("""insert into work_queue (type, data, status) values ('highlight-cores', %s, 'NEW')""", (task_id,))
+      cursor.execute("""insert into work_queue (type, key, status) values ('highlight-cores', %s, 'NEW')""", (task_id,))
 
     # search for assetion failures etc
     # XXX only bother for certain task names?
-    cursor.execute("""insert into work_queue (type, data, status) values ('highlight-logs', %s, 'NEW')""", (task_id,))
+    cursor.execute("""insert into work_queue (type, key, status) values ('highlight-logs', %s, 'NEW')""", (task_id,))
 
 def process_one_job(conn):
     cursor = conn.cursor()
-    cursor.execute("""select id, type, data, retries from work_queue where status = 'NEW' or (status = 'WORK' and lease < now()) for update skip locked limit 1""")
+    cursor.execute("""select id, type, key, retries from work_queue where status = 'NEW' or (status = 'WORK' and lease < now()) for update skip locked limit 1""")
     row = cursor.fetchone()
     if not row:
       return False
-    id, type, data, retries = row
+    id, type, key, retries = row
     if retries and retries >= retry_limit(type):
       cursor.execute("""update work_queue set status = 'FAIL' where id = %s""", (id,))
       id = None
@@ -162,13 +203,15 @@ def process_one_job(conn):
 
     # dispatch to the right work handler
     if type == "fetch-task-logs":
-      fetch_task_logs(conn, data)
+      fetch_task_logs(conn, key)
     elif type == "fetch-task-artifacts":
-      fetch_task_artifacts(conn, data)
+      fetch_task_artifacts(conn, key)
     elif type == "highlight-cores":
-      highlight_cores(conn, data)
+      highlight_cores(conn, key)
     elif type == "highlight-logs":
-      highlight_logs(conn, data)
+      highlight_logs(conn, key)
+    elif type == "highlight-tests":
+      highlight_tests(conn, key)
     else:
       pass
 
