@@ -126,7 +126,7 @@ def pull_build_results(conn):
                                WHERE task_id = %s""",
                            (status, task_id))
             # if we reached a final state then it is time to pull down the
-            # artifacts and task commands
+            # artifacts (without bodies) and task commands (steps)
             if not task_still_running:
               # fetch the list of artifacts immediately
               have_artifacts = False
@@ -136,20 +136,18 @@ def pull_build_results(conn):
                                   VALUES (%s, %s, %s, %s)
                                   ON CONFLICT DO NOTHING""",
                                (task_id, name, path, size))
-              # fetch the artifact bodies later
-              if have_artifacts:
-                cursor.execute("""insert into work_queue (type, key, status)
-                                  values ('fetch-task-artifacts', %s, 'NEW')""",
-                              (task_id,))
-              # likewise for the task commands (steps)
+              # artifact bodies will only be fetched after we figure out which tests
+              # failed to avoid downloading too much
+
+              # fetch the list of task commands (steps)
               for name, xtype, status, duration in get_commands_for_task(task_id):
                 cursor.execute("""INSERT INTO task_command (task_id, name, type, status, duration)
                                   VALUES (%s, %s, %s, %s, %s * interval '1 second')""",
                                (task_id, name, xtype, status, duration))
-              # the actual log bodies can be fetched later
+              # the actual log bodies can be fetched later (and will trigger more jobs)
               cursor.execute("""insert into work_queue (type, key, status)
                                 values ('fetch-task-logs', %s, 'NEW')""",
-                            (task_id,))
+                             (task_id,))
         else:
           cursor.execute("""INSERT INTO task (task_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())""",

@@ -99,7 +99,7 @@ def highlight_logs(conn, task_id):
     cursor.execute("""delete from highlight where task_id = %s and type in ('sanitizer', 'assertion', 'panic')""", (task_id,))
 
     # scan all artifact files for patterns we recognise
-    cursor.execute("""select name, path, body from artifact where task_id = %s""", (task_id,))
+    cursor.execute("""select name, path, body from artifact where task_id = %s and body is not null""", (task_id,))
     for name, path, body in cursor.fetchall():
         source = "artifact:" + name + "/" + path
         for line in body.splitlines():
@@ -119,9 +119,11 @@ def highlight_tests(conn, task_id):
 
     # just in case we are re-run, remove older highlights of the type we will insert
     cursor.execute("""delete from highlight where task_id = %s and type in ('regress', 'isolation', 'tap')""", (task_id,))
+    cursor.execute("""delete from test where task_id = %s and type = 'tap'""", (task_id,))
 
     # XXX why do we use different names on Windows and *nix?
-    cursor.execute("""select name, log from task_command where task_id = %s and name in ('test_world', 'check_world')""", (task_id,))
+    # XXX log should not be null, because this job should only run after fetch-task-logs
+    cursor.execute("""select name, log from task_command where task_id = %s and name in ('test_world', 'check_world') and log is not null""", (task_id,))
     for name, log in cursor.fetchall():
         source = "command:" + name
         in_tap_summary = False
@@ -133,17 +135,36 @@ def highlight_tests(conn, task_id):
                 collected_tap.clear()
 
         for line in log.splitlines():
+            # "structured" test result capture: we want all the results
+            # including success (later this might come from meson's .json file
+            # so we don't need hairy regexes)
+            #
+            # note: failures captured here will affect the fetch-task-artifacts
+            # job
+            groups = re.match(r'.* postgresql:[^ ]+ / ([^ /]+)/([^ ]+) *([A-Z]+) *([0-9.]+s).*', line)
+            if groups:
+                suite = groups.group(1)
+                test = groups.group(2)
+                result = groups.group(3)
+                duration = groups.group(4)
+                cursor.execute("""insert into test (task_id, type, suite, name, result, duration) values (%s, 'tap', %s, %s, %s, %s) on conflict do nothing""", (task_id, suite, test, result, duration))
+
+            # "unstructured" highlight, raw log excerpt
             if re.match(r'.*Summary of Failures:', line):
                 dump_tap(source)
                 in_tap_summary = True
                 continue
-            if in_tap_summary:
-                if re.match(r'.* postgresql:[^ ]+ / [^ ]+ *', line):
+            if re.match(r'.* postgresql:[^ ]+ / [^ ]+ .*', line):
+                if groups:
                     collected_tap.append(line)
                 elif re.match(r'.*Expected Fail:.*', line):
                     dump_tap(source)
                     in_tap_summary = False
         dump_tap(source)
+
+    # now that we have the list of failed tests, we can pull down the correct
+    # subset of the artifact bodies
+    cursor.execute("""insert into work_queue (type, key, status) values ('fetch-task-artifacts', %s, 'NEW')""", (task_id,))
  
 def fetch_task_logs(conn, task_id):
     cursor = conn.cursor()
@@ -162,28 +183,55 @@ def fetch_task_logs(conn, task_id):
     if cores:
       cursor.execute("""insert into work_queue (type, key, status) values ('highlight-cores', %s, 'NEW')""", (task_id,))
 
+    # analyse meson's test summary
+    cursor.execute("""insert into work_queue (type, key, status) values ('highlight-tests', %s, 'NEW')""", (task_id,))
+
 def fetch_task_artifacts(conn, task_id):
     cursor = conn.cursor()
     cores = False
+    other_artifacts = False
 
-    # download the artifacts for this task
-    cursor.execute("""select name, path from artifact where task_id = %s and body is null""", (task_id,))
-    for name, path in cursor.fetchall():
+    # download the artifacts for this task.   we want the Windows crashlog ones
+    # always, and the testrun ones, but we exclude subdirectories corresponding to
+    # tests that passed, to save on disk space
+    cursor.execute("""select name, path
+                        from artifact
+                       where task_id = %s
+                         and body is null
+                         and (name = 'crashlog' or
+                              (name = 'testrun' and
+                              substring(regexp_replace(path, 'build/testrun/', '') from '[^/]+/[^/]+') not in
+                              (select suite || '/' || name
+                                 from test
+                                where task_id = %s
+                                  and result = 'OK')))""", (task_id, task_id))
+    artifacts_to_fetch = cursor.fetchall()
+    if len(artifacts_to_fetch) == 0:
+        # if that didnt' find any, then perhaps we don't have any "test" rows because
+        # this is an autoconf build with unparseable logs.  just download everything (note that artifacts
+        # only exist at all if *something* failed, we just don't know what it was)
+        cursor.execute("""select name, path from artifact where task_id = %s and body is null""", (task_id,))
+        artifacts_to_fetch = cursor.fetchall()
+
+    for name, path in artifacts_to_fetch:
       if name == "crashlog":
         cores = True
+      else:
+        other_artifacts = True
+
       url = "https://api.cirrus-ci.com/v1/artifact/task/%s/%s/%s" % (task_id, name, path)
       #print(url)
       log = binary_to_safe_utf8(cfbot_util.slow_fetch_binary(url))
       cursor.execute("""update artifact set body = %s where task_id = %s and name = %s and path = %s""", (log, task_id, name, path))
 
     # if we pulled down any "crashlog" artifacts (where backtraces show up on
-    # Windows), create a new job to scan it for highlights
+    # Windows), create a new job to scan it for highlights (for non-Windows, backtraces are in command logs)
     if cores:
       cursor.execute("""insert into work_queue (type, key, status) values ('highlight-cores', %s, 'NEW')""", (task_id,))
 
-    # search for assetion failures etc
-    # XXX only bother for certain task names?
-    cursor.execute("""insert into work_queue (type, key, status) values ('highlight-logs', %s, 'NEW')""", (task_id,))
+    # if we pulled down anything else, scan it for hightlights and tests
+    if other_artifacts:
+      cursor.execute("""insert into work_queue (type, key, status) values ('highlight-logs', %s, 'NEW')""", (task_id,))
 
 def process_one_job(conn):
     cursor = conn.cursor()
@@ -192,6 +240,7 @@ def process_one_job(conn):
     if not row:
       return False
     id, type, key, retries = row
+    print("XXX " + type + " " + key);
     if retries and retries >= retry_limit(type):
       cursor.execute("""update work_queue set status = 'FAIL' where id = %s""", (id,))
       id = None
@@ -222,7 +271,7 @@ def process_one_job(conn):
 
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
-    #analyse_backtraces(conn, "6066735829221376")
+    #highlight_tests(conn, "4595408144433152")
     #conn.commit()
     #process_one_job(conn)
     while process_one_job(conn):
