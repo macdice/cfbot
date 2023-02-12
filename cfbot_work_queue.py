@@ -23,7 +23,7 @@ def binary_to_safe_utf8(bytes):
       text = text.replace("\r", "") # strip windows noise
       return text
 
-def index_cores(conn, task_id):
+def ingest_cores(conn, task_id):
     collected = []
     cursor = conn.cursor()
     command = None
@@ -89,7 +89,7 @@ def index_cores(conn, task_id):
     if state == "in-backtrace":
         dump(source)
 
-def index_task_artifacts(conn, task_id):
+def ingest_task_artifacts(conn, task_id):
     cursor = conn.cursor()
 
     # prevent concurrency at the task level (should really be per work item type?)
@@ -111,7 +111,7 @@ def index_task_artifacts(conn, task_id):
             elif re.match(r'.*PANIC: .*', line):
                 cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'panic', %s, %s)""", (task_id, source, line))
 
-def index_task_logs(conn, task_id):
+def ingest_task_logs(conn, task_id):
     cursor = conn.cursor()
     cursor.execute("""select from task where task_id = %s for update""", (task_id,))
     cursor.execute("""delete from highlight where task_id = %s and type in ('compiler', 'linker')""", (task_id,))
@@ -130,7 +130,7 @@ def index_task_logs(conn, task_id):
                 elif re.match(r'.*: undefined reference to .*', line):
                     cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'linker', %s, %s)""", (task_id, source, line))
 
-def index_tests(conn, task_id):
+def ingest_tests(conn, task_id):
     cursor = conn.cursor()
 
     # prevent concurrency at the task level (should really be per work item type?)
@@ -199,13 +199,13 @@ def fetch_task_logs(conn, task_id):
     # if we just pulled down 'cores' log (where backtraces show up on
     # Linux/FreeBSD/macOS), create a new job to scan it for highlights
     if cores:
-      cursor.execute("""insert into work_queue (type, key, status) values ('index-cores', %s, 'NEW')""", (task_id,))
+      cursor.execute("""insert into work_queue (type, key, status) values ('ingest-cores', %s, 'NEW')""", (task_id,))
 
     # index meson test summary (note: we do this before we try to pull down artifact bodies)
-    cursor.execute("""insert into work_queue (type, key, status) values ('index-tests', %s, 'NEW')""", (task_id,))
+    cursor.execute("""insert into work_queue (type, key, status) values ('ingest-tests', %s, 'NEW')""", (task_id,))
 
     # index compiler/linker warnings and errors
-    cursor.execute("""insert into work_queue (type, key, status) values ('index-task-logs', %s, 'NEW')""", (task_id,))
+    cursor.execute("""insert into work_queue (type, key, status) values ('ingest-task-logs', %s, 'NEW')""", (task_id,))
 
 def fetch_task_artifacts(conn, task_id):
     cursor = conn.cursor()
@@ -249,11 +249,11 @@ def fetch_task_artifacts(conn, task_id):
     # Windows), create a new job to scan it for highlights (for non-Windows,
     # backtraces are in task logs)
     if cores:
-      cursor.execute("""insert into work_queue (type, key, status) values ('index-cores', %s, 'NEW')""", (task_id,))
+      cursor.execute("""insert into work_queue (type, key, status) values ('ingest-cores', %s, 'NEW')""", (task_id,))
 
     # if we pulled down anything else, scan it for highlights
     if other_artifacts:
-      cursor.execute("""insert into work_queue (type, key, status) values ('index-task-artifacts', %s, 'NEW')""", (task_id,))
+      cursor.execute("""insert into work_queue (type, key, status) values ('ingest-task-artifacts', %s, 'NEW')""", (task_id,))
 
 def process_one_job(conn, fetch_only):
     cursor = conn.cursor()
@@ -280,14 +280,14 @@ def process_one_job(conn, fetch_only):
       fetch_task_logs(conn, key)
     elif type == "fetch-task-artifacts":
       fetch_task_artifacts(conn, key)
-    elif type == "index-cores":
-      index_cores(conn, key)
-    elif type == "index-task-artifacts":
-      index_task_artifacts(conn, key)
-    elif type == "index-task-logs":
-      index_task_logs(conn, key)
-    elif type == "index-tests":
-      index_tests(conn, key)
+    elif type == "ingest-cores":
+      ingest_cores(conn, key)
+    elif type == "ingest-task-artifacts":
+      ingest_task_artifacts(conn, key)
+    elif type == "ingest-task-logs":
+      ingest_task_logs(conn, key)
+    elif type == "ingest-tests":
+      ingest_tests(conn, key)
     else:
       pass
 
