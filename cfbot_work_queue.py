@@ -118,13 +118,14 @@ def ingest_task_logs(conn, task_id):
     cursor.execute("""select name, log from task_command where task_id = %s and (name = 'build' or name like '%%_warning') and log is not null""", (task_id,))
     for name, log in cursor.fetchall():
         source = "command:" + name
-        for line in log.splitlines():
-            if name == 'build':
-                # look for MSVC problems
+        if name == 'build':
+            for line in log.splitlines():
+                # look for MSVC's warnings
                 if re.match(r'.* : (warning|error) [^:]+: .*', line):
                     cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'compiler', %s, %s)""", (task_id, source, line))
-            elif name.endswith('_warning'):
-                # look for Clang/GCC problems
+        elif name.endswith('_warning'):
+            for line in log.splitlines():
+                # look for Clang and GCC's warnings
                 if re.match(r'.*:[0-9]+: (error|warning): .*', line):
                     cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'compiler', %s, %s)""", (task_id, source, line))
                 elif re.match(r'.*: undefined reference to .*', line):
