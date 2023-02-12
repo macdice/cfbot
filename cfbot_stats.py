@@ -101,6 +101,12 @@ select t.task_name,
         task = ""
       else:
         last_task = task
+      if not a7: a7 = 0
+      if not d7: d7 = 0
+      if not a30: a30 = 0
+      if not d30: d30 = 0
+      if not a365: a365 = 0
+      if not d365: d365 = 0
       f.write("""
       <tr>
         <td>%s</td>
