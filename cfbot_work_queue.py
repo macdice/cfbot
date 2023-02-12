@@ -23,7 +23,7 @@ def binary_to_safe_utf8(bytes):
       text = text.replace("\r", "") # strip windows noise
       return text
 
-def highlight_cores(conn, task_id):
+def index_cores(conn, task_id):
     collected = []
     cursor = conn.cursor()
     command = None
@@ -89,7 +89,7 @@ def highlight_cores(conn, task_id):
     if state == "in-backtrace":
         dump(source)
 
-def highlight_logs(conn, task_id):
+def index_task_artifacts(conn, task_id):
     cursor = conn.cursor()
 
     # prevent concurrency at the task level (should really be per work item type?)
@@ -130,7 +130,7 @@ def index_task_logs(conn, task_id):
                 elif re.match(r'.*: undefined reference to .*', line):
                     cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'linker', %s, %s)""", (task_id, source, line))
 
-def highlight_tests(conn, task_id):
+def index_tests(conn, task_id):
     cursor = conn.cursor()
 
     # prevent concurrency at the task level (should really be per work item type?)
@@ -173,12 +173,11 @@ def highlight_tests(conn, task_id):
                 dump_tap(source)
                 in_tap_summary = True
                 continue
-            if re.match(r'.* postgresql:[^ ]+ / [^ ]+ .*', line):
-                if groups:
-                    collected_tap.append(line)
-                elif re.match(r'.*Expected Fail:.*', line):
-                    dump_tap(source)
-                    in_tap_summary = False
+            if in_tap_summary and re.match(r'.* postgresql:[^ ]+ / [^ ]+ .*', line):
+                collected_tap.append(line)
+            elif re.match(r'.*Expected Fail:.*', line):
+                dump_tap(source)
+                in_tap_summary = False
         dump_tap(source)
 
     # now that we have the list of failed tests, we can pull down the correct
@@ -200,12 +199,13 @@ def fetch_task_logs(conn, task_id):
     # if we just pulled down 'cores' log (where backtraces show up on
     # Linux/FreeBSD/macOS), create a new job to scan it for highlights
     if cores:
-      cursor.execute("""insert into work_queue (type, key, status) values ('highlight-cores', %s, 'NEW')""", (task_id,))
+      cursor.execute("""insert into work_queue (type, key, status) values ('index-cores', %s, 'NEW')""", (task_id,))
 
-    # analyse meson's test summary
-    cursor.execute("""insert into work_queue (type, key, status) values ('highlight-tests', %s, 'NEW')""", (task_id,))
+    # index meson test summary (note: we do this before we try to pull down artifact bodies)
+    cursor.execute("""insert into work_queue (type, key, status) values ('index-tests', %s, 'NEW')""", (task_id,))
+
+    # index compiler/linker warnings and errors
     cursor.execute("""insert into work_queue (type, key, status) values ('index-task-logs', %s, 'NEW')""", (task_id,))
-
 
 def fetch_task_artifacts(conn, task_id):
     cursor = conn.cursor()
@@ -246,13 +246,14 @@ def fetch_task_artifacts(conn, task_id):
       cursor.execute("""update artifact set body = %s where task_id = %s and name = %s and path = %s""", (log, task_id, name, path))
 
     # if we pulled down any "crashlog" artifacts (where backtraces show up on
-    # Windows), create a new job to scan it for highlights (for non-Windows, backtraces are in command logs)
+    # Windows), create a new job to scan it for highlights (for non-Windows,
+    # backtraces are in task logs)
     if cores:
-      cursor.execute("""insert into work_queue (type, key, status) values ('highlight-cores', %s, 'NEW')""", (task_id,))
+      cursor.execute("""insert into work_queue (type, key, status) values ('index-cores', %s, 'NEW')""", (task_id,))
 
-    # if we pulled down anything else, scan it for hightlights and tests
+    # if we pulled down anything else, scan it for highlights
     if other_artifacts:
-      cursor.execute("""insert into work_queue (type, key, status) values ('highlight-logs', %s, 'NEW')""", (task_id,))
+      cursor.execute("""insert into work_queue (type, key, status) values ('index-task-artifacts', %s, 'NEW')""", (task_id,))
 
 def process_one_job(conn):
     cursor = conn.cursor()
@@ -276,14 +277,14 @@ def process_one_job(conn):
       fetch_task_logs(conn, key)
     elif type == "fetch-task-artifacts":
       fetch_task_artifacts(conn, key)
-    elif type == "highlight-cores":
-      highlight_cores(conn, key)
-    elif type == "highlight-logs":
-      highlight_logs(conn, key)
+    elif type == "index-cores":
+      index_cores(conn, key)
+    elif type == "index-task-artifacts":
+      index_task_artifacts(conn, key)
     elif type == "index-task-logs":
       index_task_logs(conn, key)
-    elif type == "highlight-tests":
-      highlight_tests(conn, key)
+    elif type == "index-tests":
+      index_tests(conn, key)
     else:
       pass
 
