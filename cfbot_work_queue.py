@@ -111,6 +111,25 @@ def highlight_logs(conn, task_id):
             elif re.match(r'.*PANIC: .*', line):
                 cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'panic', %s, %s)""", (task_id, source, line))
 
+def index_task_logs(conn, task_id):
+    cursor = conn.cursor()
+    cursor.execute("""select from task where task_id = %s for update""", (task_id,))
+    cursor.execute("""delete from highlight where task_id = %s and type in ('compiler', 'linker')""", (task_id,))
+    cursor.execute("""select name, log from task_command where task_id = %s and (name = 'build' or name like '%%_warning') and log is not null""", (task_id,))
+    for name, log in cursor.fetchall():
+        source = "command:" + name
+        for line in log.splitlines():
+            if name == 'build':
+                # look for MSVC problems
+                if re.match(r'.* : (warning|error) [^:]+: .*', line):
+                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'compiler', %s, %s)""", (task_id, source, line))
+            elif name.endswith('_warning'):
+                # look for Clang/GCC problems
+                if re.match(r'.*:[0-9]+: (error|warning): .*', line):
+                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'compiler', %s, %s)""", (task_id, source, line))
+                elif re.match(r'.*: undefined reference to .*', line):
+                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'linker', %s, %s)""", (task_id, source, line))
+
 def highlight_tests(conn, task_id):
     cursor = conn.cursor()
 
@@ -185,6 +204,8 @@ def fetch_task_logs(conn, task_id):
 
     # analyse meson's test summary
     cursor.execute("""insert into work_queue (type, key, status) values ('highlight-tests', %s, 'NEW')""", (task_id,))
+    cursor.execute("""insert into work_queue (type, key, status) values ('index-task-logs', %s, 'NEW')""", (task_id,))
+
 
 def fetch_task_artifacts(conn, task_id):
     cursor = conn.cursor()
@@ -259,6 +280,8 @@ def process_one_job(conn):
       highlight_cores(conn, key)
     elif type == "highlight-logs":
       highlight_logs(conn, key)
+    elif type == "index-task-logs":
+      index_task_logs(conn, key)
     elif type == "highlight-tests":
       highlight_tests(conn, key)
     else:
