@@ -51,43 +51,32 @@ def build_page(conn, path):
     </p>
     <p>
       Time taken, in seconds, for successfully completed task steps.  Showing
-      only configure, build and test.  Week, month and year windows are used so
-      we can see (very crudely) if it's speeding up or slowing down.
+      only configure, build and test.  All numbers are shown as 7-day, 30-day
+      and 90-day windows.  Perhaps we can see (very crudely) if it's speeding
+      up or slowing down.
     </p>
     <table>
       <tr>
-        <td>Task</td>
-        <td>Step</td>
-        <td colspan="3" align="center">7-day</td>
-        <td colspan="3" align="center">30-day</td>
-        <td colspan="3" align="center">365-day</td>
-      </tr>
-      <tr>
-        <td colspan="2"></td>
-        <td>Count</td>
-        <td>Avg</td>
-        <td>Stddev</td>
-        <td>Count</td>
-        <td>Avg</td>
-        <td>Stddev</td>
-        <td>Count</td>
-        <td>Avg</td>
-        <td>Stddev</td>
+        <td width="20%">Task</td>
+        <td width="20%">Step</td>
+        <td width="20%" align="center">Avg.</td>
+        <td width="20%" align="center">Std. dev.</td>
+        <td width="20%" align="center">Count</td>
       </tr>
 """)
     cursor = conn.cursor()
     cursor.execute("""
 select t.task_name,
        c.name,
-       count(*) filter (where created > now() - interval '1 week') as count_7,
-       avg(extract(epoch from duration)) filter (where created > now() - interval '1 week') as avg_7,
-       stddev(extract(epoch from duration)) filter (where created > now() - interval '1 week') as stddev_7,
-       count(*) filter (where created > now() - interval '1 month') as count_30,
-       avg(extract(epoch from duration)) filter (where created > now() - interval '1 month') as avg_30,
-       stddev(extract(epoch from duration)) filter (where created > now() - interval '1 month') as stddev_30,
-       count(*) filter (where created > now() - interval '1 year') as count_365,
-       avg(extract(epoch from duration)) filter (where created > now() - interval '1 year') as avg_365,
-       stddev(extract(epoch from duration)) filter (where created > now() - interval '1 year') as stddev_365
+       count(*) filter (where created > now() - interval '7 days') as count_7,
+       avg(extract(epoch from duration)) filter (where created > now() - interval '7 days') as avg_7,
+       stddev(extract(epoch from duration)) filter (where created > now() - interval '7 days') as stddev_7,
+       count(*) filter (where created > now() - interval '30 days') as count_30,
+       avg(extract(epoch from duration)) filter (where created > now() - interval '30 days') as avg_30,
+       stddev(extract(epoch from duration)) filter (where created > now() - interval '30 days') as stddev_30,
+       count(*) filter (where created > now() - interval '90 days') as count_90,
+       avg(extract(epoch from duration)) filter (where created > now() - interval '90 days') as avg_90,
+       stddev(extract(epoch from duration)) filter (where created > now() - interval '90 days') as stddev_90
   from task t
   join task_command c using (task_id)
  where c.name in ('configure', 'configure_32', 'build', 'build_32', 'test_world', 'test_world_32', 'check_world')
@@ -96,7 +85,7 @@ select t.task_name,
  order by 1, 2
 """)
     last_task = ""
-    for task, command, c7, a7, d7, c30, a30, d30, c365, a365, d365 in cursor.fetchall():
+    for task, command, c7, a7, d7, c30, a30, d30, c90, a90, d90 in cursor.fetchall():
       if task == last_task:
         task = ""
       else:
@@ -105,24 +94,85 @@ select t.task_name,
       if not d7: d7 = 0
       if not a30: a30 = 0
       if not d30: d30 = 0
-      if not a365: a365 = 0
-      if not d365: d365 = 0
+      if not a90: a90 = 0
+      if not d90: d90 = 0
       f.write("""
       <tr>
         <td>%s</td>
         <td>%s</td>
-        <td align="right">%d</td>
-        <td align="right">%.2f</td>
-        <td align="right">%.2f</td>
-        <td align="right">%d</td>
-        <td align="right">%.2f</td>
-        <td align="right">%.2f</td>
-        <td align="right">%d</td>
-        <td align="right">%.2f</td>
-        <td align="right">%.2f</td>
+        <td align="right">%.2f, %.2f, %.2f</td>
+        <td align="right">%.2f, %.2f, %.2f</td>
+        <td align="right">%d, %d, %d</td>
       </tr>
 """ %
-      (task, command, c7, a7, d7, c30, a30, d30, c365, a365, d365))
+      (task, command, a7, a30, a90, d7, d30, d90, c7, c30, c90))
+    f.write("""
+    </table>
+
+    <p>
+      Time taken for individual tests (Meson builds only, successful tasks
+      only).  Again, numbers are 7-day, 30-day, 90-day.
+    </p>
+    <table>
+      <tr>
+        <td width="20%">Task</td>
+        <td width="10%">Suite</td>
+        <td width="10%">Test</td>
+        <td width="20%" align="center">Avg.</td>
+        <td width="20%" align="center">Std. dev.</td>
+        <td width="20%" align="center">Count</td>
+      </tr>
+""")
+
+    cursor.execute("""
+select task.task_name,
+       test.suite,
+       test.name,
+       count(*) filter (where created > now() - interval '7 days') as count_7,
+       avg(extract(epoch from duration)) filter (where created > now() - interval '7 days') as avg_7,
+       stddev(extract(epoch from duration)) filter (where created > now() - interval '7 days') as stddev_7,
+       count(*) filter (where created > now() - interval '30 days') as count_30,
+       avg(extract(epoch from duration)) filter (where created > now() - interval '30 days') as avg_30,
+       stddev(extract(epoch from duration)) filter (where created > now() - interval '30 days') as stddev_30,
+       count(*) filter (where created > now() - interval '90 days') as count_90,
+       avg(extract(epoch from duration)) filter (where created > now() - interval '90 days') as avg_90,
+       stddev(extract(epoch from duration)) filter (where created > now() - interval '90 days') as stddev_90
+  from task
+  join test using (task_id)
+ where task.status = 'COMPLETED'
+   and test.result = 'OK'
+ group by 1, 2, 3
+ order by 1, 2, 3
+""")
+    last_task = ""
+    last_suite = ""
+    for task, suite, test, c7, a7, d7, c30, a30, d30, c90, a90, d90 in cursor.fetchall():
+      if task == last_task:
+        task = ""
+      else:
+        last_task = task
+      if suite == last_suite:
+        suite = ""
+      else:
+        last_suite = suite
+      if not a7: a7 = 0
+      if not d7: d7 = 0
+      if not a30: a30 = 0
+      if not d30: d30 = 0
+      if not a90: a90 = 0
+      if not d90: d90 = 0
+      f.write("""
+      <tr>
+        <td>%s</td>
+        <td>%s</td>
+        <td>%s</td>
+        <td align="right">%.2f, %.2f, %.2f</td>
+        <td align="right">%.2f, %.2f, %.2f</td>
+        <td align="right">%d, %d, %d</td>
+      </tr>
+""" %
+      (task, suite, test, a7, a30, a90, d7, d30, d90, c7, c30, c90))
+
     f.write("""
     </table>
   </body>
