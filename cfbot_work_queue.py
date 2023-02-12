@@ -142,7 +142,7 @@ def index_tests(conn, task_id):
 
     # XXX why do we use different names on Windows and *nix?
     # XXX log should not be null, because this job should only run after fetch-task-logs
-    cursor.execute("""select name, log from task_command where task_id = %s and name in ('test_world', 'check_world') and log is not null""", (task_id,))
+    cursor.execute("""select name, log from task_command where task_id = %s and name in ('test_world', 'test_running', 'check_world') and log is not null""", (task_id,))
     for name, log in cursor.fetchall():
         source = "command:" + name
         in_tap_summary = False
@@ -255,9 +255,12 @@ def fetch_task_artifacts(conn, task_id):
     if other_artifacts:
       cursor.execute("""insert into work_queue (type, key, status) values ('index-task-artifacts', %s, 'NEW')""", (task_id,))
 
-def process_one_job(conn):
+def process_one_job(conn, fetch_only):
     cursor = conn.cursor()
-    cursor.execute("""select id, type, key, retries from work_queue where status = 'NEW' or (status = 'WORK' and lease < now()) for update skip locked limit 1""")
+    if fetch_only:
+      cursor.execute("""select id, type, key, retries from work_queue where type like 'fetch-%' and (status = 'NEW' or (status = 'WORK' and lease < now())) for update skip locked limit 1""")
+    else:
+      cursor.execute("""select id, type, key, retries from work_queue where status = 'NEW' or (status = 'WORK' and lease < now()) for update skip locked limit 1""")
     row = cursor.fetchone()
     if not row:
       return False
@@ -298,5 +301,5 @@ if __name__ == "__main__":
     #highlight_tests(conn, "4595408144433152")
     #conn.commit()
     #process_one_job(conn)
-    while process_one_job(conn):
+    while process_one_job(conn, False):
      pass
