@@ -51,13 +51,12 @@ def insert_highlight(cursor, task_id, type, source, excerpt):
 def insert_work_queue(cursor, type, key):
     cursor.execute("""insert into work_queue (type, key, status) values (%s, %s, 'NEW')""", (type, key))
 
-def ingest_task_artifacts(conn, task_id):
-    cursor = conn.cursor()
-
-    # prevent concurrency at the task level (should really be per work item type?)
+def lock_task(cursor, task_id):
     cursor.execute("""select from task where task_id = %s for update""", (task_id,))
 
-    # just in case we are re-run, remove older highlights of the type we will insert
+def ingest_task_artifacts(conn, task_id):
+    cursor = conn.cursor()
+    lock_task(cursor, task_id)
     cursor.execute("""delete from highlight where task_id = %s and (type in ('sanitizer', 'assertion', 'panic') or (type = 'core' and not exists (select * from task_command where task_id = %s and name = 'cores')))""", (task_id, task_id))
 
     # scan all artifact files for patterns we recognise
@@ -103,7 +102,7 @@ def ingest_task_artifacts(conn, task_id):
 
 def ingest_task_logs(conn, task_id):
     cursor = conn.cursor()
-    cursor.execute("""select from task where task_id = %s for update""", (task_id,))
+    lock_task(cursor, task_id)
     cursor.execute("""delete from highlight where task_id = %s and (type in ('compiler', 'linker', 'regress', 'isolation', 'tap') or (type = 'core' and exists (select * from task_command where task_id = %s and name = 'cores')))""", (task_id, task_id))
     cursor.execute("""delete from test where task_id = %s and type = 'tap'""", (task_id,))
     cursor.execute("""select name, log from task_command where task_id = %s and (name in ('build', 'test_world', 'test_running', 'check_world', 'cores') or name like '%%_warning') and log is not null""", (task_id,))
