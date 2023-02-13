@@ -126,6 +126,7 @@ select t.task_name,
 
     cursor.execute("""
 select task.task_name,
+       test.command,
        test.suite,
        test.name,
        count(*) filter (where created > now() - interval '7 days') as count_7,
@@ -141,12 +142,14 @@ select task.task_name,
   join test using (task_id)
  where task.status = 'COMPLETED'
    and test.result = 'OK'
- group by 1, 2, 3
- order by 1, 2, 3
+ group by 1, 2, 3, 4
+ order by 1, 2, 3, 4
 """)
     last_task = ""
     last_suite = ""
-    for task, suite, test, c7, a7, d7, c30, a30, d30, c90, a90, d90 in cursor.fetchall():
+    for task, command, suite, test, c7, a7, d7, c30, a30, d30, c90, a90, d90 in cursor.fetchall():
+      if command.endswith('32'):
+          task += "/32" # rather than wasting a whole column on "command"
       if task == last_task:
         task = ""
       else:

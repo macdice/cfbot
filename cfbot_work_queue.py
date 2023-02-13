@@ -128,7 +128,7 @@ def ingest_task_logs(conn, task_id):
     cursor.execute("""select name, log
                         from task_command
                        where task_id = %s
-                         and (name in ('build', 'test_world', 'test_running', 'check_world', 'cores') or name like '%%_warning')
+                         and (name in ('build', 'build_32', 'test_world', 'test_world_32', 'test_running', 'check_world', 'cores') or name like '%%_warning')
                          and log is not null""", (task_id,))
     for name, log in cursor.fetchall():
         source = "command:" + name
@@ -138,7 +138,7 @@ def ingest_task_logs(conn, task_id):
         elif name.endswith('_warning'):
             for line in log.splitlines():
                 highlight_patterns(cursor, task_id, source, WARNING_PATTERNS, line)
-        elif name in ("test_world", "test_running", "check_world"):
+        elif name in ("test_world", "test_world_32", "test_running", "check_world"):
             in_tap_summary = False
             collected_tap = []
 
@@ -160,10 +160,10 @@ def ingest_task_logs(conn, task_id):
                     test = groups.group(2)
                     result = groups.group(3)
                     duration = groups.group(4)
-                    cursor.execute("""insert into test (task_id, type, suite, name, result, duration)
-                                      values (%s, 'tap', %s, %s, %s, %s)
+                    cursor.execute("""insert into test (task_id, command, type, suite, name, result, duration)
+                                      values (%s, %s, 'tap', %s, %s, %s, %s)
                                       on conflict do nothing""",
-                                   (task_id, suite, test, result, duration))
+                                   (task_id, name, suite, test, result, duration))
 
                 # "unstructured" highlight, raw log excerpt
                 if re.match(r'.*Summary of Failures:', line):
@@ -240,11 +240,13 @@ def fetch_task_artifacts(conn, task_id):
                          and body is null
                          and (name = 'crashlog' or
                               (name = 'testrun' and
-                              substring(regexp_replace(path, 'build/testrun/', '') from '[^/]+/[^/]+') not in
-                              (select suite || '/' || name
-                                 from test
-                                where task_id = %s
-                                  and result in ('OK', 'SKIP'))))""", (task_id, task_id))
+                               (task_id, substring(path from '^[^/]+/testrun/[^/]+/[^/]+')) not in
+                                (select task_id,
+                                        regexp_replace(regexp_replace(command, '^test_world_32', 'build-32'), '^(test|check)_world', 'build') ||
+                                        '/testrun/' || suite || '/' || name
+                                   from test
+                                  where task_id = %s
+                                    and result in ('OK', 'SKIP'))))""", (task_id, task_id))
     artifacts_to_fetch = cursor.fetchall()
     if len(artifacts_to_fetch) == 0:
         # if that didn't find any, then perhaps we don't have any "test" rows because
@@ -318,7 +320,7 @@ def process_one_job(conn, fetch_only):
 
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
-    #ingest_task_artifacts(conn, "6343592172584960")
+    #ingest_task_logs(conn, "5009777160355840")
     #conn.commit()
     #process_one_job(conn)
     while process_one_job(conn, False):
