@@ -7,10 +7,26 @@ import math
 import os
 import re
 
-# simple one-line patterns to look out for in artifacts
+# Patterns to look out for in artifact files.
 ARTIFACT_PATTERNS = ((re.compile(r'SUMMARY: .*Sanitizer.*'), "sanitizer"),
                      (re.compile(r'.*TRAP: failed Assert.*'), "assertion"),
                      (re.compile(r'.*PANIC: .*'), "panic"))
+
+# Patterns to look out for in "build" step.  This patterns detects MSVC
+# warnings, which notably don't cause a build failure so this might be our only
+# chance to notice them early.
+BUILD_PATTERNS = ((re.compile(r'.* : (warning|error) [^:]+: .*'), "compiler"),)
+
+# Patterns to look out for in the "*_warnings" steps.  These detect GCC and
+# Clang warnings.
+WARNING_PATTERNS = ((re.compile(r'.*:[0-9]+: (error|warning): .*'), "compiler"),
+                    (re.compile(r'.*: undefined reference to .*'), "linker"))
+
+def highlight_patterns(cursor, task_id, patterns, line):
+    for pattern, highlight_type in patterns:
+        if pattern.match(line):
+            insert_highlight(cursor, task_id, highlight_type, source, line)
+            break
 
 def retry_limit(type):
     if type.startswith("fetch-"):
@@ -83,10 +99,7 @@ def ingest_task_artifacts(conn, task_id):
 
         # Process the simple patterns
         for line in body.splitlines():
-            for pattern, highlight_type in ARTIFACT_PATTERNS:
-                if pattern.match(line):
-                    insert_highlight(cursor, task_id, highlight_type, source, line)
-                    break
+            highlight_patterns(cursor, task_id, ARTIFACT_PATTERNS, line)
 
 def ingest_task_logs(conn, task_id):
     cursor = conn.cursor()
@@ -98,17 +111,10 @@ def ingest_task_logs(conn, task_id):
         source = "command:" + name
         if name == 'build':
             for line in log.splitlines():
-                # look for MSVC's warnings in the regular build (note: these
-                # don't even cause failure, so quite interesting to highlight)
-                if re.match(r'.* : (warning|error) [^:]+: .*', line):
-                    insert_highlight(cursor, task_id, "compiler", source, line)
+                highlight_patterns(cursor, task_id, BUILD_PATTERNS, line)
         elif name.endswith('_warning'):
             for line in log.splitlines():
-                # look for Clang and GCC's warnings in the special _warning tasks
-                if re.match(r'.*:[0-9]+: (error|warning): .*', line):
-                    insert_highlight(cursor, task_id, "compiler", source, line)
-                elif re.match(r'.*: undefined reference to .*', line):
-                    insert_highlight(cursor, task_id, "linker", source, line)
+                highlight_patterns(cursor, task_id, WARNING_PATTERNS, line)
         elif name in ("test_world", "test_running", "check_world"):
             in_tap_summary = False
             collected_tap = []
