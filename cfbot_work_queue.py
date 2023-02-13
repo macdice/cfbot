@@ -243,8 +243,10 @@ def fetch_task_artifacts(conn, task_id):
                               (name = 'testrun' and
                                (task_id, substring(path from '^[^/]+/testrun/[^/]+/[^/]+')) not in
                                 (select task_id,
-                                        regexp_replace(regexp_replace(command, '^test_world_32', 'build-32'), '^(test_world|test_running|check_world)', 'build') ||
-                                        '/testrun/' || suite || '/' || name
+					case command
+                                          when 'test_world_32' then 'build-32/testrun/'
+					  else 'build/testrun/'
+					end || suite || '/' || name
                                    from test
                                   where task_id = %s
                                     and result in ('OK', 'SKIP'))))""", (task_id, task_id))
