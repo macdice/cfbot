@@ -1,10 +1,6 @@
 import logging
 import sys
 
-# which CI providers are enabled
-CI_MODULES = ("appveyor", "cirrus",)
-CI_PROVIDERS = ("appveyor", "cirrus/windows", "cirrus/freebsd", "cirrus/linux", "cirrus/macos")
-
 # http settings (be polite by identifying ourselves and limited rate)
 SLOW_FETCH_SLEEP = 0 #1.0
 USER_AGENT = "PostgreSQL patch tester at http://cfbot.cputube.org"

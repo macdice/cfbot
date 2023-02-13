@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
-import cfbot_appveyor
 import cfbot_cirrus
-import cfbot_travis
 
 import cfbot_commitfest
 import cfbot_commitfest_rpc

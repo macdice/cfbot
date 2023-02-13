@@ -242,7 +242,7 @@ def process_one_job(conn, fetch_only):
     if not row:
       return False
     id, type, key, retries = row
-    print("XXX " + type + " " + key);
+    #print("XXX " + type + " " + key);
     if retries and retries >= retry_limit(type):
       cursor.execute("""update work_queue set status = 'FAIL' where id = %s""", (id,))
       id = None
