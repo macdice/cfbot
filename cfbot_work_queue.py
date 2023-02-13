@@ -57,10 +57,20 @@ def lock_task(cursor, task_id):
 def ingest_task_artifacts(conn, task_id):
     cursor = conn.cursor()
     lock_task(cursor, task_id)
-    cursor.execute("""delete from highlight where task_id = %s and (type in ('sanitizer', 'assertion', 'panic') or (type = 'core' and not exists (select * from task_command where task_id = %s and name = 'cores')))""", (task_id, task_id))
+    cursor.execute("""delete from highlight
+                       where task_id = %s
+                         and (type in ('sanitizer', 'assertion', 'panic') or
+                              (type = 'core' and not exists (select *
+                                                               from task_command
+                                                              where task_id = %s
+                                                                and name = 'cores')))""",
+                   (task_id, task_id))
 
     # scan all artifact files for patterns we recognise
-    cursor.execute("""select name, path, body from artifact where task_id = %s and body is not null""", (task_id,))
+    cursor.execute("""select name, path, body
+                        from artifact
+                       where task_id = %s
+                         and body is not null""", (task_id,))
     for name, path, body in cursor.fetchall():
         source = "artifact:" + name + "/" + path
 
@@ -103,9 +113,23 @@ def ingest_task_artifacts(conn, task_id):
 def ingest_task_logs(conn, task_id):
     cursor = conn.cursor()
     lock_task(cursor, task_id)
-    cursor.execute("""delete from highlight where task_id = %s and (type in ('compiler', 'linker', 'regress', 'isolation', 'tap') or (type = 'core' and exists (select * from task_command where task_id = %s and name = 'cores')))""", (task_id, task_id))
-    cursor.execute("""delete from test where task_id = %s and type = 'tap'""", (task_id,))
-    cursor.execute("""select name, log from task_command where task_id = %s and (name in ('build', 'test_world', 'test_running', 'check_world', 'cores') or name like '%%_warning') and log is not null""", (task_id,))
+    cursor.execute("""delete from highlight
+                       where task_id = %s
+                         and (type in ('compiler', 'linker', 'regress', 'isolation', 'tap') or
+                              (type = 'core' and exists (select *
+                                                           from task_command
+                                                          where task_id = %s
+                                                            and name = 'cores')))""",
+                   (task_id, task_id))
+    cursor.execute("""delete from test
+                       where task_id = %s
+                         and type = 'tap'""",
+                   (task_id,))
+    cursor.execute("""select name, log
+                        from task_command
+                       where task_id = %s
+                         and (name in ('build', 'test_world', 'test_running', 'check_world', 'cores') or name like '%%_warning')
+                         and log is not null""", (task_id,))
     for name, log in cursor.fetchall():
         source = "command:" + name
         if name == 'build':
@@ -136,7 +160,10 @@ def ingest_task_logs(conn, task_id):
                     test = groups.group(2)
                     result = groups.group(3)
                     duration = groups.group(4)
-                    cursor.execute("""insert into test (task_id, type, suite, name, result, duration) values (%s, 'tap', %s, %s, %s, %s) on conflict do nothing""", (task_id, suite, test, result, duration))
+                    cursor.execute("""insert into test (task_id, type, suite, name, result, duration)
+                                      values (%s, 'tap', %s, %s, %s, %s)
+                                      on conflict do nothing""",
+                                   (task_id, suite, test, result, duration))
 
                 # "unstructured" highlight, raw log excerpt
                 if re.match(r'.*Summary of Failures:', line):
@@ -193,7 +220,10 @@ def fetch_task_logs(conn, task_id):
     cursor.execute("""select name from task_command where task_id = %s""", (task_id,))
     for command, in cursor.fetchall():
         log = binary_to_safe_utf8(cfbot_util.slow_fetch_binary("https://api.cirrus-ci.com/v1/task/%s/logs/%s.log" % (task_id, command)))
-        cursor.execute("""update task_command set log = %s where task_id = %s and name = %s""", (log, task_id, command))
+        cursor.execute("""update task_command
+                             set log = %s
+                           where task_id = %s
+                             and name = %s""", (log, task_id, command))
 
     # defer ingestion until a later step
     insert_work_queue(cursor, "ingest-task-logs", task_id)
@@ -235,19 +265,35 @@ def fetch_task_artifacts(conn, task_id):
 def process_one_job(conn, fetch_only):
     cursor = conn.cursor()
     if fetch_only:
-      cursor.execute("""select id, type, key, retries from work_queue where type like 'fetch-%' and (status = 'NEW' or (status = 'WORK' and lease < now())) for update skip locked limit 1""")
+      cursor.execute("""select id, type, key, retries
+                         from work_queue
+                        where type like 'fetch-%'
+                          and (status = 'NEW' or (status = 'WORK' and lease < now()))
+                          for update skip locked
+                        limit 1""")
     else:
-      cursor.execute("""select id, type, key, retries from work_queue where status = 'NEW' or (status = 'WORK' and lease < now()) for update skip locked limit 1""")
+      cursor.execute("""select id, type, key, retries
+                          from work_queue
+                         where status = 'NEW'
+                            or (status = 'WORK' and lease < now())
+                           for update skip locked
+                         limit 1""")
     row = cursor.fetchone()
     if not row:
       return False
     id, type, key, retries = row
     #print("XXX " + type + " " + key);
     if retries and retries >= retry_limit(type):
-      cursor.execute("""update work_queue set status = 'FAIL' where id = %s""", (id,))
+      cursor.execute("""update work_queue
+                           set status = 'FAIL'
+                         where id = %s""", (id,))
       id = None
     else:
-      cursor.execute("""update work_queue set lease = now() + interval '15 minutes', status = 'WORK', retries = coalesce(retries + 1, 0) where id = %s""", (id,))
+      cursor.execute("""update work_queue
+                           set lease = now() + interval '15 minutes',
+                               status = 'WORK',
+                               retries = coalesce(retries + 1, 0)
+                         where id = %s""", (id,))
     conn.commit()
     if not id:
       return True # done, go around again
@@ -265,7 +311,8 @@ def process_one_job(conn, fetch_only):
       pass
 
     # if we made it this far without an error, this work item is done
-    cursor.execute("""delete from work_queue where id = %s""", (id,))
+    cursor.execute("""delete from work_queue
+                       where id = %s""", (id,))
     conn.commit()
     return True # go around again
 
