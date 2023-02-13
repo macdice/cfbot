@@ -114,72 +114,59 @@ def ingest_task_artifacts(conn, task_id):
 def ingest_task_logs(conn, task_id):
     cursor = conn.cursor()
     cursor.execute("""select from task where task_id = %s for update""", (task_id,))
-    cursor.execute("""delete from highlight where task_id = %s and type in ('compiler', 'linker')""", (task_id,))
-    cursor.execute("""select name, log from task_command where task_id = %s and (name = 'build' or name like '%%_warning') and log is not null""", (task_id,))
+    cursor.execute("""delete from highlight where task_id = %s and type in ('compiler', 'linker', 'regress', 'isolation', 'tap')""", (task_id,))
+    cursor.execute("""delete from test where task_id = %s and type = 'tap'""", (task_id,))
+    cursor.execute("""select name, log from task_command where task_id = %s and (name in ('build', 'test_world', 'test_running', 'check_world') or name like '%%_warning') and log is not null""", (task_id,))
     for name, log in cursor.fetchall():
         source = "command:" + name
         if name == 'build':
             for line in log.splitlines():
-                # look for MSVC's warnings
+                # look for MSVC's warnings in the regular build (note: these
+                # don't even cause failure, so quite interesting to highlight)
                 if re.match(r'.* : (warning|error) [^:]+: .*', line):
                     cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'compiler', %s, %s)""", (task_id, source, line))
         elif name.endswith('_warning'):
             for line in log.splitlines():
-                # look for Clang and GCC's warnings
+                # look for Clang and GCC's warnings in the special _warning tasks
                 if re.match(r'.*:[0-9]+: (error|warning): .*', line):
                     cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'compiler', %s, %s)""", (task_id, source, line))
                 elif re.match(r'.*: undefined reference to .*', line):
                     cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'linker', %s, %s)""", (task_id, source, line))
+        elif name in ("test_world", "test_running", "check_world"):
+            in_tap_summary = False
+            collected_tap = []
 
-def ingest_tests(conn, task_id):
-    cursor = conn.cursor()
+            def dump_tap(source):
+                if len(collected_tap) > 0:
+                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'tap', %s, %s)""", (task_id, source, "\n".join(collected_tap)))
+                    collected_tap.clear()
 
-    # prevent concurrency at the task level (should really be per work item type?)
-    cursor.execute("""select from task where task_id = %s for update""", (task_id,))
+            for line in log.splitlines():
+                # "structured" test result capture: we want all the results
+                # including success (later this might come from meson's .json file
+                # so we don't need hairy regexes)
+                #
+                # note: failures captured here will affect the fetch-task-artifacts
+                # job
+                groups = re.match(r'.* postgresql:[^ ]+ / ([^ /]+)/([^ ]+) *([A-Z]+) *([0-9.]+s).*', line)
+                if groups:
+                    suite = groups.group(1)
+                    test = groups.group(2)
+                    result = groups.group(3)
+                    duration = groups.group(4)
+                    cursor.execute("""insert into test (task_id, type, suite, name, result, duration) values (%s, 'tap', %s, %s, %s, %s) on conflict do nothing""", (task_id, suite, test, result, duration))
 
-    # just in case we are re-run, remove older highlights of the type we will insert
-    cursor.execute("""delete from highlight where task_id = %s and type in ('regress', 'isolation', 'tap')""", (task_id,))
-    cursor.execute("""delete from test where task_id = %s and type = 'tap'""", (task_id,))
-
-    # XXX why do we use different names on Windows and *nix?
-    # XXX log should not be null, because this job should only run after fetch-task-logs
-    cursor.execute("""select name, log from task_command where task_id = %s and name in ('test_world', 'test_running', 'check_world') and log is not null""", (task_id,))
-    for name, log in cursor.fetchall():
-        source = "command:" + name
-        in_tap_summary = False
-        collected_tap = []
-
-        def dump_tap(source):
-            if len(collected_tap) > 0:
-                cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'tap', %s, %s)""", (task_id, source, "\n".join(collected_tap)))
-                collected_tap.clear()
-
-        for line in log.splitlines():
-            # "structured" test result capture: we want all the results
-            # including success (later this might come from meson's .json file
-            # so we don't need hairy regexes)
-            #
-            # note: failures captured here will affect the fetch-task-artifacts
-            # job
-            groups = re.match(r'.* postgresql:[^ ]+ / ([^ /]+)/([^ ]+) *([A-Z]+) *([0-9.]+s).*', line)
-            if groups:
-                suite = groups.group(1)
-                test = groups.group(2)
-                result = groups.group(3)
-                duration = groups.group(4)
-                cursor.execute("""insert into test (task_id, type, suite, name, result, duration) values (%s, 'tap', %s, %s, %s, %s) on conflict do nothing""", (task_id, suite, test, result, duration))
-
-            # "unstructured" highlight, raw log excerpt
-            if re.match(r'.*Summary of Failures:', line):
-                dump_tap(source)
-                in_tap_summary = True
-                continue
-            if in_tap_summary and re.match(r'.* postgresql:[^ ]+ / [^ ]+ .*', line):
-                collected_tap.append(line)
-            elif re.match(r'.*Expected Fail:.*', line):
-                dump_tap(source)
-                in_tap_summary = False
-        dump_tap(source)
+                # "unstructured" highlight, raw log excerpt
+                if re.match(r'.*Summary of Failures:', line):
+                    dump_tap(source)
+                    in_tap_summary = True
+                    continue
+                if in_tap_summary and re.match(r'.* postgresql:[^ ]+ / [^ ]+ .*', line):
+                    collected_tap.append(line)
+                elif re.match(r'.*Expected Fail:.*', line):
+                    dump_tap(source)
+                    in_tap_summary = False
+            dump_tap(source)
 
     # now that we have the list of failed tests, we can pull down the correct
     # subset of the artifact bodies
@@ -202,10 +189,7 @@ def fetch_task_logs(conn, task_id):
     if cores:
       cursor.execute("""insert into work_queue (type, key, status) values ('ingest-cores', %s, 'NEW')""", (task_id,))
 
-    # index meson test summary (note: we do this before we try to pull down artifact bodies)
-    cursor.execute("""insert into work_queue (type, key, status) values ('ingest-tests', %s, 'NEW')""", (task_id,))
-
-    # index compiler/linker warnings and errors
+    # defer ingestion until a later step
     cursor.execute("""insert into work_queue (type, key, status) values ('ingest-task-logs', %s, 'NEW')""", (task_id,))
 
 def fetch_task_artifacts(conn, task_id):
@@ -287,8 +271,6 @@ def process_one_job(conn, fetch_only):
       ingest_task_artifacts(conn, key)
     elif type == "ingest-task-logs":
       ingest_task_logs(conn, key)
-    elif type == "ingest-tests":
-      ingest_tests(conn, key)
     else:
       pass
 
