@@ -23,7 +23,18 @@ def binary_to_safe_utf8(bytes):
       text = text.replace("\r", "") # strip windows noise
       return text
 
+def insert_highlight(cursor, task_id, type, source, excerpt):
+    cursor.execute("""insert into highlight (task_id, type, source, excerpt)
+                      values (%s, %s, %s, %s)""",
+                   (task_id, type, source, excerpt))
+
 def ingest_task_artifacts(conn, task_id):
+
+    # simple one-line patterns to look out for in artifacts
+    simple_patterns = ((re.compile(r'SUMMARY: .*Sanitizer.*'), "sanitizer"),
+                       (re.compile(r'.*TRAP: failed Assert.*'), "assertion"),
+                       (re.compile(r'.*PANIC: .*'), "panic"))
+
     cursor = conn.cursor()
 
     # prevent concurrency at the task level (should really be per work item type?)
@@ -44,7 +55,7 @@ def ingest_task_artifacts(conn, task_id):
             in_backtrace = False
 
             def dump(source):
-                cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'core', %s, %s)""", (task_id, source, "\n".join(collected)))
+                insert_highlight(cursor, task_id, "core", source,"\n".join(collected))
                 collected.clear()
 
             for line in body.splitlines():
@@ -69,12 +80,10 @@ def ingest_task_artifacts(conn, task_id):
 
         else:
             for line in body.splitlines():
-                if re.match(r'SUMMARY: .*Sanitizer.*', line):
-                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'sanitizer', %s, %s)""", (task_id, source, line))
-                elif re.match(r'.*TRAP: failed Assert.*', line):
-                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'assertion', %s, %s)""", (task_id, source, line))
-                elif re.match(r'.*PANIC: .*', line):
-                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'panic', %s, %s)""", (task_id, source, line))
+                for pattern, highlight_type in simple_patterns:
+                    if pattern.match(line):
+                        insert_highlight(cursor, task_id, highlight_type, source, line)
+                        break
 
 def ingest_task_logs(conn, task_id):
     cursor = conn.cursor()
@@ -89,21 +98,21 @@ def ingest_task_logs(conn, task_id):
                 # look for MSVC's warnings in the regular build (note: these
                 # don't even cause failure, so quite interesting to highlight)
                 if re.match(r'.* : (warning|error) [^:]+: .*', line):
-                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'compiler', %s, %s)""", (task_id, source, line))
+                    insert_highlight(cursor, task_id, "compiler", source, line)
         elif name.endswith('_warning'):
             for line in log.splitlines():
                 # look for Clang and GCC's warnings in the special _warning tasks
                 if re.match(r'.*:[0-9]+: (error|warning): .*', line):
-                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'compiler', %s, %s)""", (task_id, source, line))
+                    insert_highlight(cursor, task_id, "compiler", source, line)
                 elif re.match(r'.*: undefined reference to .*', line):
-                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'linker', %s, %s)""", (task_id, source, line))
+                    insert_highlight(cursor, task_id, "linker", source, line)
         elif name in ("test_world", "test_running", "check_world"):
             in_tap_summary = False
             collected_tap = []
 
             def dump_tap(source):
                 if len(collected_tap) > 0:
-                    cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'tap', %s, %s)""", (task_id, source, "\n".join(collected_tap)))
+                    insert_highlight(cursor, task_id, "tap", source, "\n".join(collected_tap))
                     collected_tap.clear()
 
             for line in log.splitlines():
@@ -142,7 +151,7 @@ def ingest_task_logs(conn, task_id):
             in_backtrace = False
 
             def dump(source):
-                cursor.execute("""insert into highlight (task_id, type, source, excerpt) values (%s, 'core', %s, %s)""", (task_id, source, "\n".join(collected)))
+                insert_highlight(cursor, task_id, "core", source, "\n".join(collected))
                 collected.clear()
 
             for line in log.splitlines():
@@ -254,7 +263,7 @@ def process_one_job(conn, fetch_only):
 
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
-    #ingest_task_artifacts(conn, "6706544826384384")
+    #ingest_task_artifacts(conn, "6343592172584960")
     #conn.commit()
     #process_one_job(conn)
     while process_one_job(conn, False):
