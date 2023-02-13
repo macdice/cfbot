@@ -171,7 +171,8 @@ def ingest_task_logs(conn, task_id):
                     in_tap_summary = True
                     continue
                 if in_tap_summary and re.match(r'.* postgresql:[^ ]+ / [^ ]+ .*', line):
-                    collected_tap.append(line)
+                    if not re.match(r'.* SKIP .*', line):
+                        collected_tap.append(line)
                 elif re.match(r'.*Expected Fail:.*', line):
                     dump_tap(source)
                     in_tap_summary = False
@@ -242,7 +243,7 @@ def fetch_task_artifacts(conn, task_id):
                               (name = 'testrun' and
                                (task_id, substring(path from '^[^/]+/testrun/[^/]+/[^/]+')) not in
                                 (select task_id,
-                                        regexp_replace(regexp_replace(command, '^test_world_32', 'build-32'), '^(test|check)_world', 'build') ||
+                                        regexp_replace(regexp_replace(command, '^test_world_32', 'build-32'), '^(test_world|test_running|check_world)', 'build') ||
                                         '/testrun/' || suite || '/' || name
                                    from test
                                   where task_id = %s
