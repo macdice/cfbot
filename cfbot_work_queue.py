@@ -22,7 +22,7 @@ BUILD_PATTERNS = ((re.compile(r'.* : (warning|error) [^:]+: .*'), "compiler"),)
 WARNING_PATTERNS = ((re.compile(r'.*:[0-9]+: (error|warning): .*'), "compiler"),
                     (re.compile(r'.*: undefined reference to .*'), "linker"))
 
-def highlight_patterns(cursor, task_id, patterns, line):
+def highlight_patterns(cursor, task_id, source, patterns, line):
     for pattern, highlight_type in patterns:
         if pattern.match(line):
             insert_highlight(cursor, task_id, highlight_type, source, line)
@@ -108,7 +108,7 @@ def ingest_task_artifacts(conn, task_id):
 
         # Process the simple patterns
         for line in body.splitlines():
-            highlight_patterns(cursor, task_id, ARTIFACT_PATTERNS, line)
+            highlight_patterns(cursor, task_id, source, ARTIFACT_PATTERNS, line)
 
 def ingest_task_logs(conn, task_id):
     cursor = conn.cursor()
@@ -134,10 +134,10 @@ def ingest_task_logs(conn, task_id):
         source = "command:" + name
         if name == 'build':
             for line in log.splitlines():
-                highlight_patterns(cursor, task_id, BUILD_PATTERNS, line)
+                highlight_patterns(cursor, task_id, source, BUILD_PATTERNS, line)
         elif name.endswith('_warning'):
             for line in log.splitlines():
-                highlight_patterns(cursor, task_id, WARNING_PATTERNS, line)
+                highlight_patterns(cursor, task_id, source, WARNING_PATTERNS, line)
         elif name in ("test_world", "test_running", "check_world"):
             in_tap_summary = False
             collected_tap = []
@@ -244,7 +244,7 @@ def fetch_task_artifacts(conn, task_id):
                               (select suite || '/' || name
                                  from test
                                 where task_id = %s
-                                  and result = 'OK')))""", (task_id, task_id))
+                                  and result in ('OK', 'SKIP'))))""", (task_id, task_id))
     artifacts_to_fetch = cursor.fetchall()
     if len(artifacts_to_fetch) == 0:
         # if that didn't find any, then perhaps we don't have any "test" rows because
