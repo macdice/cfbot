@@ -7,14 +7,18 @@ import math
 import os
 import re
 
-from cfbot_commitfest_rpc import Submission
+# simple one-line patterns to look out for in artifacts
+ARTIFACT_PATTERNS = ((re.compile(r'SUMMARY: .*Sanitizer.*'), "sanitizer"),
+                     (re.compile(r'.*TRAP: failed Assert.*'), "assertion"),
+                     (re.compile(r'.*PANIC: .*'), "panic"))
 
 def retry_limit(type):
     if type.startswith("fetch-"):
         # Things that hit network APIs get multiple retries
         return 3
 
-    # Everything else is just assumed to be a bug/data problem and should just fail
+    # Everything else is just assumed to be a bug/data problem and requires
+    # user intervention
     return 0
 
 def binary_to_safe_utf8(bytes):
@@ -32,12 +36,6 @@ def insert_work_queue(cursor, type, key):
     cursor.execute("""insert into work_queue (type, key, status) values (%s, %s, 'NEW')""", (type, key))
 
 def ingest_task_artifacts(conn, task_id):
-
-    # simple one-line patterns to look out for in artifacts
-    simple_patterns = ((re.compile(r'SUMMARY: .*Sanitizer.*'), "sanitizer"),
-                       (re.compile(r'.*TRAP: failed Assert.*'), "assertion"),
-                       (re.compile(r'.*PANIC: .*'), "panic"))
-
     cursor = conn.cursor()
 
     # prevent concurrency at the task level (should really be per work item type?)
@@ -51,6 +49,7 @@ def ingest_task_artifacts(conn, task_id):
     for name, path, body in cursor.fetchall():
         source = "artifact:" + name + "/" + path
 
+        # Crashlogs require some multi-line processing
         if name == "crashlog":
             # Windows crash logs show up as artifacts (see also
             # ingest_task_logs for Unix)
@@ -80,13 +79,14 @@ def ingest_task_artifacts(conn, task_id):
                             in_backtrace = False
             if in_backtrace:
                 dump(source)
+            continue
 
-        else:
-            for line in body.splitlines():
-                for pattern, highlight_type in simple_patterns:
-                    if pattern.match(line):
-                        insert_highlight(cursor, task_id, highlight_type, source, line)
-                        break
+        # Process the simple patterns
+        for line in body.splitlines():
+            for pattern, highlight_type in ARTIFACT_PATTERNS:
+                if pattern.match(line):
+                    insert_highlight(cursor, task_id, highlight_type, source, line)
+                    break
 
 def ingest_task_logs(conn, task_id):
     cursor = conn.cursor()
