@@ -28,6 +28,9 @@ def insert_highlight(cursor, task_id, type, source, excerpt):
                       values (%s, %s, %s, %s)""",
                    (task_id, type, source, excerpt))
 
+def insert_work_queue(cursor, type, key):
+    cursor.execute("""insert into work_queue (type, key, status) values (%s, %s, 'NEW')""", (type, key))
+
 def ingest_task_artifacts(conn, task_id):
 
     # simple one-line patterns to look out for in artifacts
@@ -176,7 +179,7 @@ def ingest_task_logs(conn, task_id):
 
     # now that we have the list of failed tests, we can pull down the artifact
     # bodies more efficiently (excluded successful tests)
-    cursor.execute("""insert into work_queue (type, key, status) values ('fetch-task-artifacts', %s, 'NEW')""", (task_id,))
+    insert_work_queue(cursor, "fetch-task-artifacts", task_id)
  
 def fetch_task_logs(conn, task_id):
     cursor = conn.cursor()
@@ -188,7 +191,7 @@ def fetch_task_logs(conn, task_id):
         cursor.execute("""update task_command set log = %s where task_id = %s and name = %s""", (log, task_id, command))
 
     # defer ingestion until a later step
-    cursor.execute("""insert into work_queue (type, key, status) values ('ingest-task-logs', %s, 'NEW')""", (task_id,))
+    insert_work_queue(cursor, "ingest-task-logs", task_id)
 
 def fetch_task_artifacts(conn, task_id):
     cursor = conn.cursor()
@@ -222,7 +225,7 @@ def fetch_task_artifacts(conn, task_id):
       cursor.execute("""update artifact set body = %s where task_id = %s and name = %s and path = %s""", (log, task_id, name, path))
 
     # defer ingestion to a later step
-    cursor.execute("""insert into work_queue (type, key, status) values ('ingest-task-artifacts', %s, 'NEW')""", (task_id,))
+    insert_work_queue(cursor, "ingest-task-artifacts", task_id)
 
 def process_one_job(conn, fetch_only):
     cursor = conn.cursor()
