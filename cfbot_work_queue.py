@@ -265,7 +265,7 @@ def fetch_task_artifacts(conn, task_id):
         # if that didn't find any, then perhaps we don't have any "test" rows because
         # this is an autoconf build with unparseable logs.  just download everything (note that artifacts
         # only exist at all if *something* failed, we just don't know what it was)
-        cursor.execute("""select name, path from artifact where task_id = %s and body is null""", (task_id,))
+        cursor.execute("""select name, path from artifact where task_id = %s and body is null and name = 'log'""", (task_id,))
         artifacts_to_fetch = cursor.fetchall()
 
     for name, path in artifacts_to_fetch:
