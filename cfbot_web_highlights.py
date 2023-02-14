@@ -81,12 +81,13 @@ def build_page(conn, base_path, mode, when):
     </p>
 
     <p>
-      Cfbot generates gigabytes of CI logs every week.  This is an attempt to
-      index them, so it's easier to find actionable information quickly.  New
-      ideas for what patterns to highlight for are very welcome.  "Current" shows only
-      the most recent results from each submission.  The wider time ranges may show
-      information about historical versions, and may also be used to hunt from problems
-      in master.
+      This robot generates gigabytes of CI logs every week.  Here is an attempt to
+      search for "highlights", so it's easier to find actionable information
+      quickly.  New ideas for what patterns to highlight for are very welcome.
+      "Current" shows only the most recent results from each submission.  The
+      wider time ranges may show information about historical versions, which
+      may be useful for flapping tests, and may also be used to hunt from
+      problems in master.
     </p>
     <table>
 """)
@@ -175,9 +176,8 @@ select s.name,
         if last_submission_id != submission_id:
             f.write("""
             <tr>
-              <td colspan="2">
-              [%d/%d] %s
-              </td>
+              <td width="10%%">%d/%d</td>
+              <td width="90%%">%s</td>
             </tr>""" %
             (commitfest_id, submission_id, name,))
         last_submission_id = submission_id
@@ -201,13 +201,20 @@ select s.name,
         else:
             url = "https://google.com"
 
+        def trunc(line):
+            if len(line) > 120:
+                return line[:120] + "..."
+            return line
+
+        narrow_excerpt = "\n".join([trunc(line) for line in excerpt.splitlines()])
+
         f.write("""
           <tr>
             <td width="10%%"><a href="%s">%s</a></td>
             <td width="90%%"><pre style="font-size: 9px">%s</pre></td>
           </tr>
     """ %
-                (url, type, html.escape(excerpt)))
+                (url, type, html.escape(narrow_excerpt)))
 
     f.write("""
     </table>

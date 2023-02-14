@@ -47,7 +47,8 @@ def build_page(conn, path):
       <a href="index.html">Current commitfest</a> |
       <a href="next.html">Next commitfest</a> |
       <a href="https://wiki.postgresql.org/wiki/Cfbot">FAQ</a> |
-      <a href="statistics.html">Statistics</a>
+      <b>Statistics</b> |
+      <a href="highlights/all.html">Highlights</a>
     </p>
     <p>
       Time taken, in seconds, for successfully completed task steps.  Showing

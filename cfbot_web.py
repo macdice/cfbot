@@ -214,7 +214,9 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
     <p>
       <a href="index.html">Current commitfest</a> |
       <a href="next.html">Next commitfest</a> |
-      <a href="https://wiki.postgresql.org/wiki/Cfbot">FAQ</a>
+      <a href="https://wiki.postgresql.org/wiki/Cfbot">FAQ</a> |
+      <a href="statistics.html">Statistics</a> |
+      <a href="highlights/all.html">Highlights</a>
     </p>
     <p>
       Here lives an experimental bot that converts email threads that are registered in the
