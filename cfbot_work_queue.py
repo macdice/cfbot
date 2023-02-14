@@ -59,7 +59,7 @@ def ingest_task_artifacts(conn, task_id):
     lock_task(cursor, task_id)
     cursor.execute("""delete from highlight
                        where task_id = %s
-                         and (type in ('sanitizer', 'assertion', 'panic') or
+                         and (type in ('sanitizer', 'assertion', 'panic', 'regress') or
                               (type = 'core' and not exists (select *
                                                                from task_command
                                                               where task_id = %s
@@ -104,6 +104,16 @@ def ingest_task_artifacts(conn, task_id):
                             in_backtrace = False
             if in_backtrace:
                 dump(source)
+            continue
+
+        if path.endswith("/regression.diffs"):
+            if body.strip() == "":
+                continue
+            lines = body.splitlines()
+            excerpt = "\n".join(lines[:20])
+            if len(lines) > 20:
+                excerpt += "\n...\n"
+            insert_highlight(cursor, task_id, "regress", source, excerpt)
             continue
 
         # Process the simple patterns
@@ -323,6 +333,8 @@ def process_one_job(conn, fetch_only):
 
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
+    cursor = conn.cursor()
+    cursor.execute("set synchronous_commit = off")
     #ingest_task_logs(conn, "5009777160355840")
     #conn.commit()
     #process_one_job(conn)
