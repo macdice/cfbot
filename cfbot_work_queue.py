@@ -59,7 +59,7 @@ def ingest_task_artifacts(conn, task_id):
     lock_task(cursor, task_id)
     cursor.execute("""delete from highlight
                        where task_id = %s
-                         and (type in ('sanitizer', 'assertion', 'panic', 'regress') or
+                         and (type in ('sanitizer', 'assertion', 'panic', 'regress', 'tap') or
                               (type = 'core' and not exists (select *
                                                                from task_command
                                                               where task_id = %s
@@ -116,6 +116,14 @@ def ingest_task_artifacts(conn, task_id):
             insert_highlight(cursor, task_id, "regress", source, excerpt)
             continue
 
+        if re.match("^.*/regress_log_.*$", path):
+            collected = []
+            for line in body.splitlines():
+                if re.match(".* not ok .*", line) or re.match(".*Bail out!.*", line):
+                    collected.append(line)
+            if len(collected) > 0:
+                insert_highlight(cursor, task_id, "tap", source, "\n".join(collected))
+
         # Process the simple patterns
         for line in body.splitlines():
             highlight_patterns(cursor, task_id, source, ARTIFACT_PATTERNS, line)
@@ -125,7 +133,7 @@ def ingest_task_logs(conn, task_id):
     lock_task(cursor, task_id)
     cursor.execute("""delete from highlight
                        where task_id = %s
-                         and (type in ('compiler', 'linker', 'regress', 'isolation', 'tap') or
+                         and (type in ('compiler', 'linker', 'regress', 'isolation', 'test') or
                               (type = 'core' and exists (select *
                                                            from task_command
                                                           where task_id = %s
@@ -154,7 +162,7 @@ def ingest_task_logs(conn, task_id):
 
             def dump_tap(source):
                 if len(collected_tap) > 0:
-                    insert_highlight(cursor, task_id, "tap", source, "\n".join(collected_tap))
+                    insert_highlight(cursor, task_id, "test", source, "\n".join(collected_tap))
                     collected_tap.clear()
 
             for line in log.splitlines():

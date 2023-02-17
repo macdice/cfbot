@@ -10,7 +10,7 @@ import os
 import re
 import unicodedata
 
-MODES = ("all", "assertion", "compiler", "core", "linker", "panic", "regress", "sanitizer", "tap")
+MODES = ("all", "assertion", "compiler", "core", "linker", "panic", "regress", "sanitizer", "tap", "test")
 WHEN = ("current", "7", "30", "90")
 
 def build_page(conn, base_path, mode, when):
@@ -83,11 +83,10 @@ def build_page(conn, base_path, mode, when):
     <p>
       This robot generates gigabytes of CI logs every week.  Here is an attempt to
       search for "highlights", so it's easier to find actionable information
-      quickly.  New ideas for what patterns to highlight for are very welcome.
+      quickly.  New ideas for what patterns to search for are very welcome.
       "Current" shows only the most recent results from each submission.  The
-      wider time ranges may show information about historical versions, which
-      may be useful for flapping tests, and may also be used to hunt from
-      problems in master.
+      wider time ranges also show information about historical versions, which
+      may be useful for flapping tests, and also for hunting for bugs in master.
     </p>
     <table>
 """)
@@ -142,7 +141,7 @@ select s.name,
   join task t on t.submission_id = b.submission_id and t.commit_id = b.commit_id
   join highlight h on h.task_id = t.task_id
  where true %s
- order by t.created desc, h.type, h.source""" % (extra,))
+ order by t.created desc, t.task_name, h.type, h.source""" % (extra,))
 
     else:
         cursor.execute("""
@@ -167,7 +166,7 @@ select s.name,
   join highlight h using (task_id)
  where created > now() - interval '%s days'
        %s
- order by t.created desc, h.type, h.source
+ order by t.created desc, t.task_name, h.type, h.source
 """ % (days, extra))
 
     last_submission_id = 0
