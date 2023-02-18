@@ -259,7 +259,7 @@ def fetch_task_artifacts(conn, task_id):
                          and body is null
                          and (name = 'crashlog' or
                               (name = 'testrun' and
-                               (task_id, substring(path from '^[^/]+/testrun/[^/]+/[^/]+')) not in
+                               (task_id, coalesce(substring(path from '^[^/]+/testrun/[^/]+/[^/]+'), '')) not in
                                 (select task_id,
 					case command
                                           when 'test_world_32' then 'build-32/testrun/'
