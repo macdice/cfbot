@@ -1,5 +1,5 @@
 import cfbot_config
-import psycopg2
+import pg8000
 import requests
 import time
 
@@ -29,4 +29,4 @@ def gc(conn):
 
 def db():
   """Get a database connection."""
-  return psycopg2.connect(cfbot_config.DSN)
+  return pg8000.connect(cfbot_config.DSN)

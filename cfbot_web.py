@@ -87,7 +87,7 @@ def load_submissions(conn, commitfest_id):
                            s.status,
                            s.last_branch_message_id
                       FROM submission s
-                     WHERE s.commitfest_id >= commitfest_id
+                     WHERE s.commitfest_id >= %s
                        AND s.status IN ('Ready for Committer',
                                         'Needs review',
                                         'Waiting on Author')

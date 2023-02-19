@@ -6,6 +6,7 @@ import cfbot_util
 import math
 import os
 import re
+import scipy.stats
 
 # Patterns to look out for in artifact files.
 ARTIFACT_PATTERNS = ((re.compile(r'SUMMARY: .*Sanitizer.*'), "sanitizer"),
@@ -231,6 +232,7 @@ def ingest_task_logs(conn, task_id):
     # now that we have the list of failed tests, we can pull down the artifact
     # bodies more efficiently (excluded successful tests)
     insert_work_queue(cursor, "fetch-task-artifacts", task_id)
+    #insert_work_queue(cursor, "analyze-task-tests", task_id)
  
 def fetch_task_logs(conn, task_id):
     cursor = conn.cursor()
@@ -285,6 +287,36 @@ def fetch_task_artifacts(conn, task_id):
     # defer ingestion to a later step
     insert_work_queue(cursor, "ingest-task-artifacts", task_id)
 
+def analyze_task_tests(conn, task_id):
+    cursor = conn.cursor()
+    cursor.execute("""select submission_id from task where task_id = %s""", (task_id,))
+    submission_id, = cursor.fetchone()
+    cursor.execute("""delete from test_statistics where submission_id = %s""", (submission_id,))
+    cursor.execute("""
+select task.task_name,
+       test.command,
+       test.suite,
+       test.name,
+       array_agg(extract (epoch from test.duration))
+         filter (where task.submission_id = %s),
+       array_agg(extract (epoch from test.duration))
+         filter (where task.submission_id != %s)
+  from test
+  join task using (task_id)
+ where task.created > now() - interval '7 days'
+   and task.status = 'COMPLETED'
+ group by 1, 2, 3, 4""",
+                   (submission_id, submission_id))
+    for task_name, command, suite, test, sample1, sample2 in cursor.fetchall():
+        if not sample1 or not sample2 or len(sample1) <= 2 or len(sample2) <= 2:
+            continue
+        patched_avg = sum(sample1) / len(sample1)
+        other_avg = sum(sample2) / len(sample2)
+        t, p = scipy.stats.ttest_ind(sample1, sample2, equal_var=False)
+        cursor.execute("""insert into test_statistics (submission_id, task_name, command, suite, test, other_avg, patched_avg, t, p)
+                          values (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                       (submission_id,task_name, command, suite, test, other_avg, patched_avg, t, p))
+
 def process_one_job(conn, fetch_only):
     cursor = conn.cursor()
     if fetch_only:
@@ -330,6 +362,8 @@ def process_one_job(conn, fetch_only):
       fetch_task_artifacts(conn, key)
     elif type == "ingest-task-artifacts":
       ingest_task_artifacts(conn, key)
+    elif type == "analyze-task-tests":
+      analyze_task_tests(conn, key)
     else:
       pass
 
