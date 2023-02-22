@@ -128,6 +128,7 @@ def load_submissions(conn, commitfest_id):
                         FROM task b
                        WHERE b.commitfest_id = %s
                          AND b.submission_id = %s
+                         AND created > now() - interval '48 hours'
                     ORDER BY b.position, b.modified DESC""",
                    (commitfest_id, submission_id))
     seen = {}
