@@ -148,16 +148,16 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
             task_name,
             age,
             status,
-            prev_status
+            status IS DISTINCT FROM prev_status AS is_new
        FROM latest_tasks
        JOIN task_positions USING (task_name)
   LEFT JOIN prev_statuses USING (task_name)
    ORDER BY position
     """, (commit_id, commit_id, commit_id, submission_id))
-    for task_id, task_name, age, status, prev_status in cursor.fetchall():
+    for task_id, task_name, age, status, is_new in cursor.fetchall():
       url = "https://cirrus-ci.com/task/" + task_id
       r = BuildResult(task_name, status, url, False, None, True, age)
-      r.new = (status != prev_status)
+      r.new = is_new
       submission.build_results.append(r)
 
   return results
