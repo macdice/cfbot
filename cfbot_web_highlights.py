@@ -117,7 +117,8 @@ def build_page(conn, base_path, mode, when):
 with latest_submission as (select distinct on (submission_id)
                                   commitfest_id,
                                   submission_id,
-                                  name
+                                  name,
+                                  status
                              from submission
                             order by submission_id, commitfest_id desc),
      latest_branch as (select distinct on (submission_id)
@@ -140,7 +141,8 @@ select s.name,
   join latest_branch b on b.submission_id = s.submission_id
   join task t on t.submission_id = b.submission_id and t.commit_id = b.commit_id
   join highlight h on h.task_id = t.task_id
- where true %s
+ where s.status in ('Ready for Committer', 'Needs review', 'Waiting on Author')
+       %s
  order by t.created desc, t.task_name, h.type, h.source""" % (extra,))
 
     else:
