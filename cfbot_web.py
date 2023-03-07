@@ -132,7 +132,8 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
      latest_tasks AS   (SELECT DISTINCT ON (task_name)
                                task_name,
                                task_id,
-                               status
+                               status,
+                               EXTRACT(epoch FROM now() - modified) AS age
                           FROM task
                          WHERE commit_id = %s
                       ORDER BY task_name, modified DESC),
@@ -145,6 +146,7 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
                       ORDER BY task_name, modified DESC)
      SELECT task_id,
             task_name,
+            age,
             status,
             prev_status
        FROM latest_tasks
@@ -152,9 +154,9 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
   LEFT JOIN prev_statuses USING (task_name)
    ORDER BY position
     """, (commit_id, commit_id, commit_id, submission_id))
-    for task_id, task_name, status, prev_status in cursor.fetchall():
+    for task_id, task_name, age, status, prev_status in cursor.fetchall():
       url = "https://cirrus-ci.com/task/" + task_id
-      r = BuildResult(task_name, status, url, False, None, True, 0)
+      r = BuildResult(task_name, status, url, False, None, True, age)
       r.new = (status != prev_status)
       submission.build_results.append(r)
 
