@@ -122,33 +122,41 @@ def load_submissions(conn, commitfest_id):
 
     # get latest build status from each task, and also figure out if it's
     # new or had a different status in the past 24 hours
-    cursor.execute("""SELECT b.task_name, b.status, b.task_id, b.commit_id,
-                             b.modified > now() - interval '24 hours',
-                             EXTRACT(epoch FROM now() - b.modified)
-                        FROM task b
-                       WHERE b.commitfest_id = %s
-                         AND b.submission_id = %s
-                         AND created > now() - interval '48 hours'
-                    ORDER BY b.position, b.modified DESC""",
-                   (commitfest_id, submission_id))
-    seen = {}
-    for task_name, status, task_id, b_commit_id, recent, age in cursor.fetchall():
+    cursor.execute("""
+WITH task_positions AS (SELECT DISTINCT ON (task_name)
+                               task_name,
+                               position
+                          FROM task
+                         WHERE commit_id = %s
+                      ORDER BY task_name, modified),
+     latest_tasks AS   (SELECT DISTINCT ON (task_name)
+                               task_name,
+                               task_id,
+                               status
+                          FROM task
+                         WHERE commit_id = %s
+                      ORDER BY task_name, modified DESC),
+     prev_statuses AS  (SELECT DISTINCT ON (task_name)
+                               task_name,
+                               status AS prev_status
+                          FROM task
+                         WHERE commit_id != %s
+                           AND submission_id = %s
+                      ORDER BY task_name, modified DESC)
+     SELECT task_id,
+            task_name,
+            status,
+            prev_status
+       FROM latest_tasks
+       JOIN task_positions USING (task_name)
+  LEFT JOIN prev_statuses USING (task_name)
+   ORDER BY position
+    """, (commit_id, commit_id, commit_id, submission_id))
+    for task_id, task_name, status, prev_status in cursor.fetchall():
       url = "https://cirrus-ci.com/task/" + task_id
-      if task_name not in seen:
-        if b_commit_id != commit_id:
-          continue # Ignore tasks whose latest entry is not from the commit_id we want
-        r = BuildResult(task_name, status, url, recent, None, True, age)
-        submission.build_results.append(r)
-        seen[task_name] = r
-      else:
-        r = seen[task_name]
-        r.only = False # there is more than one result
-        if (recent or r.change == None) and status != r.status:
-          r.change = True
-
-    # figure out if it deserves to be flags as new/interesting
-    for r in submission.build_results:
-      r.new = (r.only or r.change) and r.recent
+      r = BuildResult(task_name, status, url, False, None, True, 0)
+      r.new = (status != prev_status)
+      submission.build_results.append(r)
 
   return results
 
@@ -325,5 +333,5 @@ if __name__ == "__main__":
   with cfbot_util.db() as conn:
     #rebuild(conn, commitfest_id)
     #commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
-    submissions = load_submissions(conn, 39)
-    build_page(conn, "x", 39, submissions, None, None, os.path.join(cfbot_config.WEB_ROOT, "index2.html"))
+    submissions = load_submissions(conn, 42)
+    build_page(conn, "x", 42, submissions, None, None, os.path.join(cfbot_config.WEB_ROOT, "index2.html"))
