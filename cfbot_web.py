@@ -152,6 +152,7 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
        FROM latest_tasks
        JOIN task_positions USING (task_name)
   LEFT JOIN prev_statuses USING (task_name)
+      WHERE task_name NOT LIKE '% MinGW64 %'
    ORDER BY position
     """, (commit_id, commit_id, commit_id, submission_id))
     for task_id, task_name, age, status, is_new in cursor.fetchall():
@@ -234,10 +235,10 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       <a href="https://commitfest.postgresql.org/%s">Commitfest system</a> into
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">branches on Github</a>,
       and collates test results from
-      <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>.
+      <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>.  Key: %s or %s = new/recently changed, %s or %s = stable, %s = working.
     </p>
     <table>
-""" % (commitfest_id_for_link,))
+""" % (commitfest_id_for_link, NEW_SUCCESS, NEW_FAILURE, OLD_SUCCESS, OLD_FAILURE, building(0.3)))
     for submission in submissions:
 
       # skip if we need to filter by commitfest
