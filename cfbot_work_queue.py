@@ -3,6 +3,7 @@
 import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
+import cfbot_web_highlights
 import math
 import os
 import re
@@ -23,10 +24,10 @@ BUILD_PATTERNS = ((re.compile(r'.* : (warning|error) [^:]+: .*'), "compiler"),)
 WARNING_PATTERNS = ((re.compile(r'.*:[0-9]+: (error|warning): .*'), "compiler"),
                     (re.compile(r'.*: undefined reference to .*'), "linker"))
 
-def highlight_patterns(cursor, task_id, source, patterns, line):
+def highlight_patterns(cursor, task_id, source, patterns, line, types):
     for pattern, highlight_type in patterns:
         if pattern.match(line):
-            insert_highlight(cursor, task_id, highlight_type, source, line)
+            insert_highlight(cursor, task_id, highlight_type, source, line, types)
             break
 
 def retry_limit(type):
@@ -44,7 +45,8 @@ def binary_to_safe_utf8(bytes):
       text = text.replace("\r", "") # strip windows noise
       return text
 
-def insert_highlight(cursor, task_id, type, source, excerpt):
+def insert_highlight(cursor, task_id, type, source, excerpt, types):
+    types.add(type)
     cursor.execute("""insert into highlight (task_id, type, source, excerpt)
                       values (%s, %s, %s, %s)""",
                    (task_id, type, source, excerpt))
@@ -56,6 +58,8 @@ def lock_task(cursor, task_id):
     cursor.execute("""select from task where task_id = %s for update""", (task_id,))
 
 def ingest_task_artifacts(conn, task_id):
+    highlight_types = set()
+
     cursor = conn.cursor()
     lock_task(cursor, task_id)
     cursor.execute("""delete from highlight
@@ -83,7 +87,7 @@ def ingest_task_artifacts(conn, task_id):
             in_backtrace = False
 
             def dump(source):
-                insert_highlight(cursor, task_id, "core", source,"\n".join(collected))
+                insert_highlight(cursor, task_id, "core", source,"\n".join(collected), highlight_types)
                 collected.clear()
 
             for line in body.splitlines():
@@ -114,7 +118,7 @@ def ingest_task_artifacts(conn, task_id):
             excerpt = "\n".join(lines[:20])
             if len(lines) > 20:
                 excerpt += "\n...\n"
-            insert_highlight(cursor, task_id, "regress", source, excerpt)
+            insert_highlight(cursor, task_id, "regress", source, excerpt, highlight_types)
             continue
 
         if re.match("^.*/regress_log_.*$", path):
@@ -123,13 +127,20 @@ def ingest_task_artifacts(conn, task_id):
                 if re.match(".*( not ok |Bail out!|timed out).*", line):
                     collected.append(line)
             if len(collected) > 0:
-                insert_highlight(cursor, task_id, "tap", source, "\n".join(collected))
+                insert_highlight(cursor, task_id, "tap", source, "\n".join(collected), highlight_types)
 
         # Process the simple patterns
         for line in body.splitlines():
-            highlight_patterns(cursor, task_id, source, ARTIFACT_PATTERNS, line)
+            highlight_patterns(cursor, task_id, source, ARTIFACT_PATTERNS, line, highlight_types)
+
+    # if we inserted any highlights, rebuild the appropriate pages
+    if highlight_types:
+        insert_work_queue(cursor, "refresh-highlight-pages", "all")
+        for t in highlight_types:
+            insert_work_queue(cursor, "refresh-highlight-pages", t)
 
 def ingest_task_logs(conn, task_id):
+    highlight_types = set()
     cursor = conn.cursor()
     lock_task(cursor, task_id)
     cursor.execute("""delete from highlight
@@ -153,17 +164,17 @@ def ingest_task_logs(conn, task_id):
         source = "command:" + name
         if name == 'build':
             for line in log.splitlines():
-                highlight_patterns(cursor, task_id, source, BUILD_PATTERNS, line)
+                highlight_patterns(cursor, task_id, source, BUILD_PATTERNS, line, highlight_types)
         elif name.endswith('_warning'):
             for line in log.splitlines():
-                highlight_patterns(cursor, task_id, source, WARNING_PATTERNS, line)
+                highlight_patterns(cursor, task_id, source, WARNING_PATTERNS, line, highlight_types)
         elif name in ("test_world", "test_world_32", "test_running", "check_world"):
             in_tap_summary = False
             collected_tap = []
 
             def dump_tap(source):
                 if len(collected_tap) > 0:
-                    insert_highlight(cursor, task_id, "test", source, "\n".join(collected_tap))
+                    insert_highlight(cursor, task_id, "test", source, "\n".join(collected_tap), highlight_types)
                     collected_tap.clear()
 
             for line in log.splitlines():
@@ -206,7 +217,7 @@ def ingest_task_logs(conn, task_id):
             in_backtrace = False
 
             def dump(source):
-                insert_highlight(cursor, task_id, "core", source, "\n".join(collected))
+                insert_highlight(cursor, task_id, "core", source, "\n".join(collected), highlight_types)
                 collected.clear()
 
             for line in log.splitlines():
@@ -233,6 +244,12 @@ def ingest_task_logs(conn, task_id):
     # bodies more efficiently (excluded successful tests)
     insert_work_queue(cursor, "fetch-task-artifacts", task_id)
     #insert_work_queue(cursor, "analyze-task-tests", task_id)
+
+    # if we inserted any highlights, rebuild the appropriate pages
+    if highlight_types:
+        insert_work_queue(cursor, "refresh-highlight-pages", "all")
+        for t in highlight_types:
+            insert_work_queue(cursor, "refresh-highlight-pages", t)
  
 def fetch_task_logs(conn, task_id):
     cursor = conn.cursor()
@@ -317,6 +334,10 @@ select task.task_name,
                           values (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                        (submission_id,task_name, command, suite, test, other_avg, patched_avg, t, p))
 
+def refresh_highlight_pages(conn, type):
+    # rebuild pages of the requested type/mode
+    cfbot_web_highlights.rebuild_type(conn, type)
+
 def process_one_job(conn, fetch_only):
     cursor = conn.cursor()
     if fetch_only:
@@ -364,6 +385,8 @@ def process_one_job(conn, fetch_only):
       ingest_task_artifacts(conn, key)
     elif type == "analyze-task-tests":
       analyze_task_tests(conn, key)
+    elif type == "refresh-highlight-pages":
+      refresh_highlight_pages(conn, key)
     else:
       pass
 

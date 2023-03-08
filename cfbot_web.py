@@ -101,6 +101,7 @@ def load_submissions(conn, commitfest_id):
   for commitfest_id, submission_id, name, authors, status, last_branch_message_id in cursor.fetchall():
     submission = Submission(submission_id, commitfest_id, name, status, authors, None)
     submission.last_branch_message_id = last_branch_message_id
+    submission.has_highlights = False
     results.append(submission)
 
     # check if we were able to apply the patch(es); if not,
@@ -119,6 +120,16 @@ def load_submissions(conn, commitfest_id):
         r = BuildResult("Apply patches", "FAILED", url, False, None, True, 0)
         submission.build_results.append(r)
         continue
+
+    # see if there are any highlights for this commit
+    cursor.execute("""SELECT 1
+                        FROM highlight
+                        JOIN task USING (task_id)
+                       WHERE task.commit_id = %s
+                       LIMIT 1""",
+                   (commit_id,))
+    row = cursor.fetchone()
+    submission.has_highlights = row != None;
 
     # get latest build status from each task, and also figure out if it's
     # new or had a different status in the past 24 hours
@@ -307,7 +318,10 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       patch_html = ""
       if submission.last_branch_message_id:
         patch_html = """<a title="Patch email" href="https://www.postgresql.org/message-id/%s">\u2709</a>""" % submission.last_branch_message_id
-      patch_html += """ <a title="Test history" href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql/commitfest/%s/%s">H</a>""" % (submission.commitfest_id, submission.id)
+      patch_html += """&nbsp;<a title="Test history" href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql/commitfest/%s/%s">H</a>""" % (submission.commitfest_id, submission.id)
+      if submission.has_highlights:
+        patch_html += """&nbsp;<a title="Log highlights" href="/highlights/all.html#%s">\u26a0</a>""" % submission.id
+
 
       # write out an entry
       f.write("""

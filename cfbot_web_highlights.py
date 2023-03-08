@@ -177,10 +177,10 @@ select s.name,
         if last_submission_id != submission_id:
             f.write("""
             <tr>
-              <td width="10%%">%d/%d</td>
+              <td width="10%%" id="%s">%d/%d</td>
               <td width="90%%">%s</td>
             </tr>""" %
-            (commitfest_id, submission_id, name,))
+            (submission_id, commitfest_id, submission_id, name,))
         last_submission_id = submission_id
         if last_task_id != task_id:
             if status == "COMPLETED":
@@ -224,8 +224,15 @@ select s.name,
 """)
   os.rename(path + ".tmp", path)
 
+def rebuild_type(conn, type):
+  for when in WHEN:
+    build_page(conn, os.path.join(cfbot_config.WEB_ROOT, "highlights"), type, when)
+
+def rebuild_all(conn):
+  for mode in MODES:
+    for when in WHEN:
+      build_page(conn, os.path.join(cfbot_config.WEB_ROOT, "highlights"), mode, when)
+
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
-    for mode in MODES:
-      for when in WHEN:
-        build_page(conn, os.path.join(cfbot_config.WEB_ROOT, "highlights"), mode, when)
+    rebuild_all(conn)
