@@ -316,11 +316,11 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
 
       # construct email link
       patch_html = ""
-      if submission.last_branch_message_id:
-        patch_html = """<a title="Patch email" href="https://www.postgresql.org/message-id/%s">\u2709</a>""" % submission.last_branch_message_id
-      patch_html += """&nbsp;<a title="Test history" href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql/commitfest/%s/%s">H</a>""" % (submission.commitfest_id, submission.id)
       if submission.has_highlights:
-        patch_html += """&nbsp;<a title="Log highlights" href="/highlights/all.html#%s">\u26a0</a>""" % submission.id
+        patch_html += """<a title="Log highlights" href="/highlights/all.html#%s">\u26a0</a>""" % submission.id
+      if submission.last_branch_message_id:
+        patch_html += """&nbsp;<a title="Patch email" href="https://www.postgresql.org/message-id/%s">\u2709</a>""" % submission.last_branch_message_id
+      patch_html += """&nbsp;<a title="Test history" href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql/commitfest/%s/%s">H</a>""" % (submission.commitfest_id, submission.id)
 
 
       # write out an entry
