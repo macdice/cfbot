@@ -124,7 +124,9 @@ def ingest_task_artifacts(conn, task_id):
         if re.match("^.*/regress_log_.*$", path):
             collected = []
             for line in body.splitlines():
-                if re.match(".*( not ok |Bail out!|timed out).*", line):
+                if re.match(".*(Bail out!|timed out).*", line):
+                    collected.append(line)
+                elif re.match(".* not ok .*", line) and not re.match(".* (TODO|SKIP).*", line):
                     collected.append(line)
             if len(collected) > 0:
                 insert_highlight(cursor, task_id, "tap", source, "\n".join(collected), highlight_types)
