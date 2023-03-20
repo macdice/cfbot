@@ -148,14 +148,17 @@ def load_submissions(conn, commitfest_id):
                 submission.apply_failed_since = row[0]
 
     # see if there are any highlights for this commit
-    cursor.execute("""SELECT 1
+    cursor.execute("""SELECT DISTINCT type
                         FROM highlight
                         JOIN task USING (task_id)
                        WHERE task.commit_id = %s
-                       LIMIT 1""",
+                       ORDER BY 1
+                       """,
                    (commit_id,))
-    row = cursor.fetchone()
-    submission.has_highlights = row != None;
+    types = []
+    for type, in cursor.fetchall():
+        types.append(type)
+    submission.has_highlights = types
 
     # get latest build status from each task, and also figure out if it's
     # new or had a different status in the past 24 hours
@@ -348,7 +351,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
         else:
           patch_html += """<a title="Rebase needed" href="%s">\u2672</a>""" % submission.apply_failed_url
       if submission.has_highlights:
-        patch_html += """&nbsp;<a title="Log highlights" href="/highlights/all.html#%s">\u26a0</a>""" % submission.id
+          patch_html += """&nbsp;<a title="Interesting log excerpts found: %s" href="/highlights/all.html#%s">\u26a0</a>""" % (", ".join(submission.has_highlights), submission.id)
       if submission.last_branch_message_id:
         patch_html += """&nbsp;<a title="Patch email" href="https://www.postgresql.org/message-id/%s">\u2709</a>""" % submission.last_branch_message_id
       patch_html += """&nbsp;<a title="Test history" href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql/commitfest/%s/%s">H</a>""" % (submission.commitfest_id, submission.id)
