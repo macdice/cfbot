@@ -17,7 +17,8 @@ ARTIFACT_PATTERNS = ((re.compile(r'SUMMARY: .*Sanitizer.*'), "sanitizer"),
 # Patterns to look out for in "build" step.  This patterns detects MSVC
 # warnings, which notably don't cause a build failure so this might be our only
 # chance to notice them early.
-BUILD_PATTERNS = ((re.compile(r'.* : (warning|error) [^:]+: .*'), "compiler"),)
+BUILD_PATTERNS = ((re.compile(r'.* : (warning|error) [^:]+: .*'), "compiler"), # msvc
+                  (re.compile(r'.*:[0-9]+: (error|warning): .*'), "compiler")) # gcc
 
 # Patterns to look out for in the "*_warnings" steps.  These detect GCC and
 # Clang warnings.
