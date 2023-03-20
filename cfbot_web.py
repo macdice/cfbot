@@ -104,33 +104,48 @@ def load_submissions(conn, commitfest_id):
     submission.has_highlights = False
     results.append(submission)
 
-    # see if a rebase is required because the latest attempt to apply failed
+    # find the latest branch
     submission.apply_failed_url = None
+    submission.apply_failed_since = None
     cursor.execute("""SELECT commit_id, status, url
                         FROM branch
-                       WHERE commitfest_id = %s
-                         AND submission_id = %s
-                    ORDER BY modified DESC LIMIT 1""",
-                    (commitfest_id, submission_id))
+                       WHERE submission_id = %s
+                    ORDER BY created DESC LIMIT 1""",
+                    (submission_id,))
     row = cursor.fetchone()
     if not row:
+        # no branches at all yet
         continue
     commit_id, status, url = row
+
+    # did it fail to apply?
     if status == 'failed':
         submission.apply_failed_url = url
 
-    # find the most recent commit from when we succeeded in applying
-    cursor.execute("""SELECT commit_id, status, url
-                        FROM branch
-                       WHERE commitfest_id = %s
-                         AND submission_id = %s
-                         AND commit_id IS NOT NULL
-                    ORDER BY modified DESC LIMIT 1""",
-                    (commitfest_id, submission_id))
-    row = cursor.fetchone()
-    if not row:
-        continue
-    commit_id, status, url = row
+        # find the most recent commit from when we succeeded in applying
+        # so we can show that instead
+        cursor.execute("""SELECT commit_id, status, url, created
+                            FROM branch
+                           WHERE submission_id = %s
+                             AND commit_id IS NOT NULL
+                        ORDER BY created DESC LIMIT 1""",
+                       (submission_id,))
+        row = cursor.fetchone()
+        if row:
+            commit_id, status, url, created = row
+
+            # also find the date on which we first started failing after
+            # that successful branch construction
+            cursor.execute("""SELECT to_char(created AT TIME ZONE 'GMT', 'YYYY-MM-DD')
+                            FROM branch
+                           WHERE submission_id = %s
+                             AND created > %s
+                        ORDER BY created LIMIT 1""",
+                            (submission_id, created))
+              
+            row = cursor.fetchone()
+            if row:
+                submission.apply_failed_since = row[0]
 
     # see if there are any highlights for this commit
     cursor.execute("""SELECT 1
@@ -328,7 +343,10 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # construct email link
       patch_html = ""
       if submission.apply_failed_url:
-        patch_html += """<a title="Rebase needed" href="%s">\u2672</a>""" % submission.apply_failed_url
+        if submission.apply_failed_since:
+          patch_html += """<a title="Rebase needed since %s" href="%s">\u2672</a>""" % (submission.apply_failed_since, submission.apply_failed_url)
+        else:
+          patch_html += """<a title="Rebase needed" href="%s">\u2672</a>""" % submission.apply_failed_url
       if submission.has_highlights:
         patch_html += """&nbsp;<a title="Log highlights" href="/highlights/all.html#%s">\u26a0</a>""" % submission.id
       if submission.last_branch_message_id:
