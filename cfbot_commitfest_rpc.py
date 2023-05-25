@@ -4,19 +4,8 @@
 # For now these use webscraping, but they could become real API calls.
 
 import cfbot_util
-import datetime
-import errno
 import html
-#from html.parser import HTMLParser
-import os
 import re
-import requests
-import subprocess
-import shutil
-import sys
-import tarfile
-import time
-import unicodedata
 from urllib.parse import urlparse
 
 class Submission:
