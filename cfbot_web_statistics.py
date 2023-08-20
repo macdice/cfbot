@@ -10,9 +10,7 @@ import unicodedata
 
 from cfbot_commitfest_rpc import Submission
 
-def build_page(conn, path):
-
-  with open(path + ".tmp", "w") as f:
+def header(f):
     f.write("""<html>
   <head>
     <meta charset="UTF-8"/>
@@ -50,6 +48,73 @@ def build_page(conn, path):
       <b>Statistics</b> |
       <a href="highlights/all.html">Highlights</a>
     </p>
+""")
+
+def per_day(f, conn):
+    f.write("""
+    <h2>Per day</h2>
+    <p>
+      Resources consumed per UTC day over the past couple of weeks, according to Cirrus's own reported "duration" value.
+      Also average and stddev, but these only count successful runs because otherwise fast failures would make the data hard to interpret.
+    </p>
+    <table>
+      <tr>
+        <td width="20%">Task</td>
+        <td width="10%">Date</td>
+        <td width="20%" align="center">Duration</td>
+        <td width="20%" align="center">Avg (success)</td>
+        <td width="20%" align="center">Stddev (success)</td>
+        <td width="10%" align="center">Count</td>
+      </tr>
+""")
+    cursor = conn.cursor()
+    cursor.execute("""
+with subtotals as (
+select t.created::date date,
+       t.task_name,
+       t.task_id,
+       t.status,
+       sum(c.duration) duration
+  from task t join task_command c using (task_id)
+ where t.created between date_trunc('day', now() - interval '14 days') and
+                         date_trunc('day', now())
+    and t.status not in ('CREATED', 'ABORTED')
+ group by 1, 2, 3)
+select task_name, date, 
+       
+       sum(duration),
+       avg(duration) filter (where status = 'COMPLETED') avg_success,
+       stddev(extract(epoch from duration)) filter (where status = 'COMPLETED') stddev_success,
+       count(*)
+  from subtotals
+ group by date, task_name
+ order by task_name collate "en_US", date
+""")
+    last_task = None
+    for task, date, s, avg, stddev, count in cursor.fetchall():
+      if task == last_task:
+        task = ""
+      else:
+        last_task = task
+      f.write("""
+      <tr>
+        <td>%s</td>
+        <td>%s</td>
+        <td align="right">%s</td>
+        <td align="right">%s</td>
+        <td align="right">%.2f</td>
+        <td align="right">%d</td>
+      </tr>
+""" %
+      (task, date, s, avg, stddev, count))
+    f.write("""
+    </table>
+    """)
+
+ 
+def per_task(f, conn):
+    f.write("""
+    <h2>Per task</h2>
     <p>
       Time taken, in seconds, for successfully completed task steps.  Showing
       only configure, build and test.  All numbers are shown as 7-day, 30-day
@@ -65,6 +130,7 @@ def build_page(conn, path):
         <td width="20%" align="center">Count</td>
       </tr>
 """)
+
     cursor = conn.cursor()
     cursor.execute("""
 select t.task_name,
@@ -109,7 +175,12 @@ select t.task_name,
       (task, command, a7, a30, a90, d7, d30, d90, c7, c30, c90))
     f.write("""
     </table>
+    """)
 
+def per_test(f, conn):
+    cursor = conn.cursor()
+    f.write("""
+    <h2>Per test</h2>
     <p>
       Time taken for individual tests (Meson builds only, successful tasks
       only).  Again, numbers are 7-day, 30-day, 90-day.
@@ -179,9 +250,21 @@ select task.task_name,
 
     f.write("""
     </table>
+    """)
+
+def footer(f):
+    f.write("""
   </body>
 </html>
 """)
+
+def build_page(conn, path):
+  with open(path + ".tmp", "w") as f:
+    header(f)
+    per_day(f, conn)
+    per_task(f, conn)
+    per_test(f, conn)
+    footer(f)
   os.rename(path + ".tmp", path)
 
 if __name__ == "__main__":
