@@ -1,0 +1,16 @@
+task:
+  name: Apply patches and push them to new repository
+
+  env:
+    COMMITFEST_ID: COMMITFEST_ID_PLACEHOLDER
+    SUBMISSION_ID: SUBMISSION_ID_PLACEHOLDER
+
+  container:
+    image: debian:latest
+    cpu: 0.5
+    memory: 256Mi
+
+  run_cfbot_ci_script: |
+    chmod 775 download_and_apply_patches.py
+    python3 download_and_apply_patches.py
+
