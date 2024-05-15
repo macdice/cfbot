@@ -15,6 +15,7 @@ def slow_fetch_binary(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
      commitfest server."""
   response = requests.get(url, headers={'User-Agent': cfbot_config.USER_AGENT}, timeout=cfbot_config.TIMEOUT)
+  response.raise_for_status()
   time.sleep(cfbot_config.SLOW_FETCH_SLEEP)
   return response.content
 
