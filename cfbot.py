@@ -44,7 +44,7 @@ def run():
     cfbot_commitfest.push_build_results(conn)
 
     # build one patch, if it is time for that
-    cfbot_patch.maybe_process_one(conn)
+    cfbot_patch.maybe_process_one(conn, commitfest_id)
 
     # rebuild a new set of web pages
     cfbot_web.rebuild(conn, commitfest_id)

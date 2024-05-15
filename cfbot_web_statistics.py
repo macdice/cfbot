@@ -54,14 +54,14 @@ def per_day(f, conn):
     f.write("""
     <h2>Per day</h2>
     <p>
-      Resources consumed per UTC day over the past couple of weeks, according to Cirrus's own reported "duration" value.
+      Resources consumed per UTC day over the past month, according to Cirrus's reported "duration" value.
       Also average and stddev, but these only count successful runs because otherwise fast failures would make the data hard to interpret.
     </p>
     <table>
       <tr>
         <td width="20%">Task</td>
         <td width="10%">Date</td>
-        <td width="20%" align="center">Duration</td>
+        <td width="20%" align="center">Total time</td>
         <td width="20%" align="center">Avg (success)</td>
         <td width="20%" align="center">Stddev (success)</td>
         <td width="10%" align="center">Count</td>
@@ -76,7 +76,7 @@ select t.created::date date,
        t.status,
        sum(c.duration) duration
   from task t join task_command c using (task_id)
- where t.created between date_trunc('day', now() - interval '14 days') and
+ where t.created between date_trunc('day', now() - interval '30 days') and
                          date_trunc('day', now())
     and t.status not in ('CREATED', 'ABORTED')
  group by 1, 2, 3)
@@ -96,6 +96,8 @@ select task_name, date,
         task = ""
       else:
         last_task = task
+      if stddev == None:
+        stddev = 0
       f.write("""
       <tr>
         <td>%s</td>

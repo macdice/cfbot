@@ -34,7 +34,7 @@ def need_to_limit_rate(conn):
   row = cursor.fetchone()
   return row and row[0] >= cfbot_config.CONCURRENT_BUILDS
 
-def choose_submission_with_new_patch(conn):
+def choose_submission_with_new_patch(conn, min_commitfest_id):
   """Return the ID pair for the submission most deserving, because it has been
      waiting the longest amongst submissions that have a new patch
      available."""
@@ -49,15 +49,17 @@ def choose_submission_with_new_patch(conn):
                      WHERE last_message_id IS NOT NULL
                        AND last_message_id IS DISTINCT FROM last_branch_message_id
                        AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
+                       AND commitfest_id >= %s
+                       AND submission_id NOT IN (4431, 4365) -- Joe!
                   ORDER BY last_email_time
-                     LIMIT 1""")
+                     LIMIT 1""", (min_commitfest_id,))
   row = cursor.fetchone()
   if row:
     return row
   else:
     return None, None
 
-def choose_submission_without_new_patch(conn):
+def choose_submission_without_new_patch(conn, min_commitfest_id):
   """Return the ID pair for the submission that has been waiting longest for
      a periodic bitrot check, but only if we're under the configured rate per
      hour (which is expressed as the cycle time to get through all
@@ -67,7 +69,8 @@ def choose_submission_without_new_patch(conn):
   cursor.execute("""SELECT COUNT(*)
                       FROM submission
                      WHERE last_message_id IS NOT NULL
-                       AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')""")
+                       AND commitfest_id >= %s
+                       AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')""", (min_commitfest_id,))
   number, = cursor.fetchone()
   # how many will we need to do per hour to approximate our target rate?
   target_per_hour = number / cfbot_config.CYCLE_TIME
@@ -75,17 +78,20 @@ def choose_submission_without_new_patch(conn):
   cursor.execute("""SELECT COUNT(*)
                       FROM submission
                      WHERE last_message_id IS NOT NULL
+                       AND commitfest_id >= %s
                        AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
-                       AND last_branch_time > now() - INTERVAL '1 hour'""")
+                       AND last_branch_time > now() - INTERVAL '1 hour'""", (min_commitfest_id,))
   current_rate_per_hour, = cursor.fetchone()
   # is it time yet?
   if current_rate_per_hour < target_per_hour:
     cursor.execute("""SELECT commitfest_id, submission_id
                         FROM submission
                        WHERE last_message_id IS NOT NULL
+                         AND commitfest_id >= %s
                          AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
+                         AND submission_id NOT IN (4431, 4365) -- Joe!
                     ORDER BY last_branch_time NULLS FIRST
-                       LIMIT 1""")
+                       LIMIT 1""", (min_commitfest_id,))
     row = cursor.fetchone()
     if row:
       return row
@@ -94,13 +100,13 @@ def choose_submission_without_new_patch(conn):
   else:
     return None, None
 
-def choose_submission(conn):
+def choose_submission(conn, min_commitfest_id):
   """Choose the best submission to process, giving preference to new
      patches."""
-  commitfest_id, submission_id = choose_submission_with_new_patch(conn)
+  commitfest_id, submission_id = choose_submission_with_new_patch(conn, min_commitfest_id)
   if submission_id:
     return commitfest_id, submission_id
-  commitfest_id, submission_id = choose_submission_without_new_patch(conn)
+  commitfest_id, submission_id = choose_submission_without_new_patch(conn, min_commitfest_id)
   return commitfest_id, submission_id
 
 def update_patchbase_tree(repo_dir):
@@ -238,9 +244,9 @@ def process_submission(conn, commitfest_id, submission_id):
   conn.commit()
   patchburner_ctl("destroy")
 
-def maybe_process_one(conn):
+def maybe_process_one(conn, min_commitfest_id):
   if not need_to_limit_rate(conn):
-    commitfest_id, submission_id = choose_submission(conn)
+    commitfest_id, submission_id = choose_submission(conn, min_commitfest_id)
     if submission_id:
       process_submission(conn, commitfest_id, submission_id)
  
