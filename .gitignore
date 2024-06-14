@@ -1,0 +1,12 @@
+# Local temp files
+/cfbot_config.py
+/www/
+/patchburner_template/
+/patchburner_chroot/
+
+
+# Python junk
+__pycache__
+env
+venv
+.venv

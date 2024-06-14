@@ -12,7 +12,7 @@ set -e
 
 TEMPLATE_DIR=patchburner_template
 CHROOT_DIR=patchburner_chroot
-RUNAS_USER=tmunro
+RUNAS_USER=$USER
 
 usage()
 {
@@ -76,7 +76,7 @@ create_patchburner()
       for bin in patch unzip gzip gunzip tar find sort ; do
         cp /usr/bin/$bin $CHROOT_DIR/usr/bin/
       done
-      for lib in libbz2.so libacl.so libselinux.so libc.so libm.so libattr.so libpcre.so libdl.so libpthread.so ; do
+      for lib in libbz2.so libacl.so libselinux.so libc.so libm.so libattr.so libpcre.so libpcre2-8.so libdl.so libpthread.so ; do
         cp /lib/x86_64-linux-gnu/$lib* $CHROOT_DIR/lib/x86_64-linux-gnu/
       done
       cp /lib64/ld-linux-x86-64.so* $CHROOT_DIR/lib64/
@@ -124,9 +124,7 @@ EOF
 
 apply_patches_in_patchburner()
 {
-  # TODO: Rather than running this directly so we need privs, perhaps there
-  # should be a setuid script that can do this bit for us.
-  /sbin/chroot --userspec=$RUNAS_USER $CHROOT_DIR /work/apply-patches.sh
+  sudo chroot --userspec=$RUNAS_USER $CHROOT_DIR /work/apply-patches.sh
 }
 
 case $1 in
