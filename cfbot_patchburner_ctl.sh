@@ -82,7 +82,7 @@ create_patchburner()
   ezjail-admin create -x $JAIL_NAME 'lo1|127.0.1.2'
   mkdir $HOST_ROOT_PATH/work/patches
   chown $CFBOT_USER:$CFBOT_USER $HOST_ROOT_PATH/work/patches
-  cat > $HOST_ROOT_PATH/work/apply-patches.sh <<EOF
+  cat > $HOST_ROOT_PATH/work/apply-patches.sh <<'EOF'
 #!/bin/sh
 #
 # apply all patches found in /work/patches
@@ -91,24 +91,45 @@ set -e
 
 # unpack and zip archives, tarballs etc
 cd /work/patches
-for f in \$(find . -name '*.tgz' -o -name '*.tar.gz' -o -name '*.tar.bz2') ; do
-  echo "=== expanding \$f"
-  tar xzvf \$f
+for f in $(find . -name '*.tgz' -o -name '*.tar.gz' -o -name '*.tar.bz2') ; do
+  echo "=== expanding $f"
+  tar xzvf $f
 done
-for f in \$(find . -name '*.gz') ; do
-  echo "=== expanding \$f"
-  gunzip \$f
+for f in $(find . -name '*.gz') ; do
+  echo "=== expanding $f"
+  gunzip $f
 done
-for f in \$(find . -name '*.zip') ; do
-  echo "=== expanding \$f"
-  unzip \$f
+for f in $(find . -name '*.zip') ; do
+  echo "=== expanding $f"
+  unzip $f
 done
 
 # now apply all .patch and .diff files
 cd /work/postgresql
-for f in \$(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort) ; do
-  echo "=== applying patch \$f"
-  gpatch --no-backup-if-mismatch -p1 -V none -f < "/work/patches/\$f"
+
+# But first set up the git user
+git config user.name "Commitfest Bot"
+git config user.email "cfbot@cputube.org"
+
+for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort) ; do
+  echo "=== applying patch $f"
+  git mailinfo ../msg ../patch < "/work/patches/$f" > ../info
+  # Clean out /dev/null in case git mailinfo wrote something to it
+  : > /dev/null
+
+  NAME=$(sed -n -e 's/^Author: //p' ../info)
+  EMAIL=$(sed -n -e 's/^Email: //p' ../info)
+  SUBJECT=$(sed -n -e 's/^Subject: //p' ../info)
+  DATE=$(sed -n -e 's/^Date: //p' ../info)
+  MESSAGE="$(cat ../msg)"
+  MESSAGE="${SUBJECT:-"[PATCH]: $f"}${MESSAGE:+
+
+}${MESSAGE}"
+
+  gpatch --no-backup-if-mismatch -p1 -V none -f < "/work/patches/$f"
+  git add .
+  git commit -m "$MESSAGE" --author="${NAME:-Commitfest Bot} <${EMAIL:-cfbot@cputube.org}>" --date="${DATE:-now}" --allow-empty
+
 done
 EOF
   chmod 775 $HOST_ROOT_PATH/work/apply-patches.sh
