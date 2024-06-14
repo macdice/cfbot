@@ -218,9 +218,11 @@ def process_submission(conn, commitfest_id, submission_id):
   # did "patch" actually succeed?
   if rcode != 0:
     # we failed to apply the patches
+    logging.info("failed to apply (%s, %s)" % (commitfest_id, submission_id))
     cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, status, url, created, modified) VALUES (%s, %s, 'failed', %s, now(), now())""",
                    (commitfest_id, submission_id, log_url))
   else:
+    logging.info("applied patches for (%s, %s)" % (commitfest_id, submission_id))
     # we applied the patch; now make it into a branch with a commit on it
     branch = make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id)
     # push it to the remote monitored repo, if configured
@@ -242,13 +244,19 @@ def process_submission(conn, commitfest_id, submission_id):
   # here (don't really want to go back to polling threads aggressively...)
   update_submission(conn, message_id, commit_id, commitfest_id, submission_id)
   conn.commit()
-  patchburner_ctl("destroy")
+
+  # If we're not pushing to a remote, we can clean up the branch now. Otherwise
+  # we'll leave it around so that we can see the results of patch apply.
+  if cfbot_config.GIT_REMOTE_NAME:
+    patchburner_ctl("destroy")
 
 def maybe_process_one(conn, min_commitfest_id):
   if not need_to_limit_rate(conn):
     commitfest_id, submission_id = choose_submission(conn, min_commitfest_id)
     if submission_id:
       process_submission(conn, commitfest_id, submission_id)
+  else:
+    logging.info("rate limiting in effect, see CONCURRENT_BUILDS in cfbot_config.py")
  
 if __name__ == "__main__":
   with cfbot_util.db() as conn:

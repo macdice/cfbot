@@ -1,8 +1,16 @@
 import logging
 import sys
 
+# Fill in your GitHub username here. If this is None, we won't push to GitHub
+# unless you change GIT_REMOTE_NAME.
+GITHUB_USER=None
+GITHUB_REPO="postgres"
+
 # which CI providers are enabled
 CI_MODULES = ("cirrus",)
+
+# Some settings are different for our production server
+PRODUCTION=False
 
 # http settings (be polite by identifying ourselves and limited rate)
 #SLOW_FETCH_SLEEP = 1.0
@@ -17,25 +25,37 @@ LOCK_FILE="/tmp/cfbot-lock"
 DSN="cfbot"
 
 # patch settings
-PATCHBURNER_CTL="sudo /usr/local/sbin/cfbot_patchburner_ctl.sh"
+if platform.system() == "Linux":
+  PATCHBURNER_CTL="./cfbot_patchburner_chroot_ctl.sh"
+else:
+  PATCHBURNER_CTL="sudo /usr/local/sbin/cfbot_patchburner_ctl.sh"
+
 CYCLE_TIME = 48.0
 CONCURRENT_BUILDS = 4
-
-# cirrus settings
-CIRRUS_USER="postgresql-cfbot"
-CIRRUS_REPO="postgresql"
-
-# git settings
-GIT_SSH_COMMAND="ssh -i ~/.ssh/cfbot_github_rsa"
-GIT_REMOTE_NAME="cfbot-repo"
-
 # work queue worker settings
 CONCURRENT_QUEUE_WORKERS=4
+
+# cirrus settings
+CIRRUS_USER=GITHUB_USER
+CIRRUS_REPO=GITHUB_REPO
+
+# git settings
+if PRODUCTION:
+  GIT_SSH_COMMAND="ssh -i ~/.ssh/cfbot_github_rsa"
+  GIT_REMOTE_NAME="cfbot-repo"
+else:
+  GIT_SSH_COMMAND="ssh"
+  if GITHUB_USER:
+    GIT_REMOTE_NAME=f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}.git"
+  else:
+    GIT_REMOTE_NAME=None
 
 # http output
 WEB_ROOT="www"
 CFBOT_APPLY_URL="http://cfbot.cputube.org/%s"
 
 # log settings
-logging.basicConfig(format='%(asctime)s %(message)s', filename="cfbot.log", level=logging.INFO)
-
+if PRODUCTION:
+  logging.basicConfig(format='%(asctime)s %(message)s', filename="cfbot.log", level=logging.INFO)
+else:
+  logging.basicConfig(format='%(asctime)s %(message)s', stream=sys.stderr, level=logging.INFO)

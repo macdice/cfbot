@@ -11,6 +11,7 @@ import cfbot_web
 
 import errno
 import fcntl
+import logging
 
 def try_lock():
   """Make sure that only one copy runs."""
@@ -38,9 +39,13 @@ def run():
     cfbot_cirrus.pull_build_results(conn)
 
     # exchange data with the Commitfest app
+    logging.info("pulling submissions for current commitfest")
     cfbot_commitfest.pull_submissions(conn, commitfest_id)
+    logging.info("pulling submissions for next commitfest")
     cfbot_commitfest.pull_submissions(conn, commitfest_id + 1)
+    logging.info("pulling modified threads")
     cfbot_commitfest.pull_modified_threads(conn)
+    logging.info("pushing build results")
     cfbot_commitfest.push_build_results(conn)
 
     # build one patch, if it is time for that
