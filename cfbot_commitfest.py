@@ -7,6 +7,8 @@
 import cfbot_commitfest_rpc
 import cfbot_util
 
+import logging
+
 def pull_submissions(conn, commitfest_id):
   """Fetch the list of submissions and make sure we have a row for each one.
      Update the last email time according to the Commitfest main page,
@@ -56,6 +58,7 @@ def pull_modified_threads(conn):
                         OR (last_email_time_checked != last_email_time AND
                             last_email_time < now() - interval '1 minutes')""")
   for commitfest_id, submission_id, last_email_time in cursor:
+    logging.info("checking commitfest %s submission %s" % (commitfest_id, submission_id))
     url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
     if url == None:
       message_id = None
