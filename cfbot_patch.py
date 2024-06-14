@@ -117,15 +117,16 @@ def update_patchbase_tree(repo_dir):
 def get_commit_id(repo_dir):
   return subprocess.check_output("cd %s && git show | head -1 | cut -d' ' -f2" % repo_dir, shell=True).decode('utf-8').strip()
 
-def make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id):
+def make_branch(burner_repo_path, commitfest_id, submission_id):
   branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
   logging.info("creating branch %s" % branch)
   # blow away the branch if it exists already
   subprocess.call("""cd %s && git branch -q -D %s > /dev/null 2> /dev/null""" % (burner_repo_path, branch), shell=True) # ignore failure
   # create a new one
   subprocess.check_call("""cd %s && git checkout -q -b %s""" % (burner_repo_path, branch), shell=True)
-  # add all changes
-  subprocess.check_call("""cd %s && git add -A""" % (burner_repo_path,), shell=True)
+  return branch
+
+def add_merge_commit(conn, burner_repo_path, commitfest_id, submission_id, message_id):
   # look up the data we need to make a friendly commit message
   cursor = conn.cursor()
   cursor.execute("""SELECT name, authors FROM submission WHERE commitfest_id = %s AND submission_id = %s""",
@@ -150,8 +151,8 @@ Author(s): %s
   with tempfile.NamedTemporaryFile() as tmp:
     tmp.write(commit_message.encode('utf-8'))
     tmp.flush()
-    subprocess.check_call("""cd %s && git commit -q -F %s""" % (burner_repo_path, tmp.name), shell=True)
-  return branch
+    current_commit = get_commit_id(burner_repo_path)
+    subprocess.check_call(f"""cd {burner_repo_path} && git reset master --hard -q && git merge -q --no-ff -F {tmp.name} {current_commit}""", shell=True)
 
 def patchburner_ctl(command, want_rcode=False):
   """Invoke the patchburner control script."""
@@ -208,6 +209,8 @@ def process_submission(conn, commitfest_id, submission_id):
     dest = os.path.join(patch_dir, filename)
     with open(dest, "wb+") as f:
       f.write(cfbot_util.slow_fetch_binary(patch_url))
+  # we applied the patch; now make it into a branch with a commit on it
+  branch = make_branch(burner_repo_path, commitfest_id, submission_id)
   # apply the patches inside the jail
   output, rcode = patchburner_ctl("apply", want_rcode=True)
   # write the patch output to a public log file
@@ -224,8 +227,8 @@ def process_submission(conn, commitfest_id, submission_id):
                    (commitfest_id, submission_id, log_url))
   else:
     logging.info("applied patches for (%s, %s)" % (commitfest_id, submission_id))
-    # we applied the patch; now make it into a branch with a commit on it
-    branch = make_branch(conn, burner_repo_path, commitfest_id, submission_id, message_id)
+    # we committed the patches; now add a final merge commit with some metadata
+    add_merge_commit(conn, burner_repo_path, commitfest_id, submission_id, message_id)
     # push it to the remote monitored repo, if configured
     if cfbot_config.GIT_REMOTE_NAME:
       logging.info("pushing branch %s" % branch)
