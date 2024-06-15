@@ -51,3 +51,9 @@ On FreeBSD
 ```bash
 ./cfbot.py
 ```
+
+## Debug a specific patch
+
+```bash
+./cfbot_patch.py 48 4496
+```

@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import sys
 from urllib.parse import urlparse
 
 def need_to_limit_rate(conn):
@@ -261,4 +262,7 @@ def maybe_process_one(conn, min_commitfest_id):
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
     #maybe_process_one(conn)
-    process_submission(conn, 19, 1769)
+    if len(sys.argv) != 3:
+      print("Usage: %s <commitfest_id> <submission_id>" % sys.argv[0])
+      sys.exit(1)
+    process_submission(conn, int(sys.argv[1]), int(sys.argv[2]))
