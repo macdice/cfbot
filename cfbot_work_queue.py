@@ -257,9 +257,12 @@ def fetch_task_logs(conn, task_id):
     cursor = conn.cursor()
 
     # find all the commands for this task, and pull down the logs
-    cursor.execute("""select name from task_command where task_id = %s""", (task_id,))
+    cursor.execute("""select name from task_command where task_id = %s and status not in ('SKIPPED', 'UNDEFINED', 'ABORTED')""", (task_id,))
     for command, in cursor.fetchall():
-        log = binary_to_safe_utf8(cfbot_util.slow_fetch_binary("https://api.cirrus-ci.com/v1/task/%s/logs/%s.log" % (task_id, command)))
+        log_bin = cfbot_util.slow_fetch_binary("https://api.cirrus-ci.com/v1/task/%s/logs/%s.log" % (task_id, command), True)
+        if log_bin == None:
+            continue
+        log = binary_to_safe_utf8(log_bin)
         cursor.execute("""update task_command
                              set log = %s
                            where task_id = %s
@@ -406,4 +409,5 @@ if __name__ == "__main__":
     #conn.commit()
     #process_one_job(conn)
     while process_one_job(conn, False):
+    #while process_one_job(conn, True):
      pass
