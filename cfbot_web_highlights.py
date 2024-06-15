@@ -19,7 +19,8 @@ def build_page(conn, base_path, mode, when):
   else:
       suffix = "-" + when
   path = base_path + "/" + mode + suffix + ".html"
-  with open(path + ".tmp", "w") as f:
+  path_tmp = path + ".tmp" + str(os.getpid())
+  with open(path_tmp, "w") as f:
     f.write("""<html>
   <head>
     <meta charset="UTF-8"/>
@@ -222,7 +223,7 @@ select s.name,
   </body>
 </html>
 """)
-  os.rename(path + ".tmp", path)
+  os.rename(path_tmp, path)
 
 def rebuild_type(conn, type):
   for when in WHEN:
