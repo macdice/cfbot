@@ -46,6 +46,7 @@ def building(fraction):
     large = 1
   else:
     large = 0
+  fraction = float(fraction)
   fraction -= 0.25
   return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%%s</title>
