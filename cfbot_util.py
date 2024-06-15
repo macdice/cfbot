@@ -11,10 +11,12 @@ def slow_fetch(url):
   time.sleep(cfbot_config.SLOW_FETCH_SLEEP)
   return response.text
 
-def slow_fetch_binary(url):
+def slow_fetch_binary(url, none_for_404=False):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
      commitfest server."""
   response = requests.get(url, headers={'User-Agent': cfbot_config.USER_AGENT}, timeout=cfbot_config.TIMEOUT)
+  if response.status_code == 404 and none_for_404:
+    return None
   response.raise_for_status()
   time.sleep(cfbot_config.SLOW_FETCH_SLEEP)
   return response.content
