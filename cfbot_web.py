@@ -354,8 +354,9 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
           patch_html += """&nbsp;<a title="Interesting log excerpts found: %s" href="/highlights/all.html#%s">\u26a0</a>""" % (", ".join(submission.has_highlights), submission.id)
       if submission.last_branch_message_id:
         patch_html += """&nbsp;<a title="Patch email" href="https://www.postgresql.org/message-id/%s">\u2709</a>""" % submission.last_branch_message_id
+      branch = f"commitfest/{submission.commitfest_id}/{submission.id}"
+      patch_html += f"""&nbsp;<a title="Diff on GitHub" href="https://github.com/{cfbot_config.GITHUB_USER}/{cfbot_config.GITHUB_REPO}/compare/{branch}~1...{branch}">D</a>"""
       patch_html += """&nbsp;<a title="Test history" href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql/commitfest/%s/%s">H</a>""" % (submission.commitfest_id, submission.id)
-
 
       # write out an entry
       f.write("""

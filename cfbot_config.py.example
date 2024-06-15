@@ -4,6 +4,7 @@ import sys
 # Fill in your GitHub username here. If this is None, we won't push to GitHub
 # unless you change GIT_REMOTE_NAME.
 GITHUB_USER=None
+GITHUB_REPO="postgres"
 
 # http settings (be polite by identifying ourselves and limited rate)
 SLOW_FETCH_SLEEP = 0 #1.0
