@@ -330,7 +330,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
             expected_runtime = expected_runtimes[build_result.task_name]
           else:
             expected_runtime = 60 * 30
-          if build_result.age > 0:
+          if build_result.age > 0 and expected_runtime > 0:
             fraction = build_result.age / expected_runtime
           else:
             fraction = 0.1
