@@ -404,10 +404,15 @@ def process_one_job(conn, fetch_only):
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
     cursor = conn.cursor()
-    cursor.execute("set synchronous_commit = off")
-    #ingest_task_logs(conn, "5009777160355840")
-    #conn.commit()
-    #process_one_job(conn)
-    while process_one_job(conn, False):
-    #while process_one_job(conn, True):
-     pass
+    cursor.execute("set application_name = 'cfbot_queue_worker'")
+    cursor.execute("select count(*) from pg_stat_activity where application_name = 'cfbot_queue_worker'")
+    nworkers, = cursor.fetchone()
+    # normally we start one of these every minute and finishes quickly, but
+    # we're prepared to run several at once to clear a backlog
+    if nworkers < cfbot_config.CONCURRENT_QUEUE_WORKERS:
+      cursor.execute("set synchronous_commit = off")
+      #ingest_task_logs(conn, "5009777160355840")
+      #conn.commit()
+      #process_one_job(conn)
+      while process_one_job(conn, False):
+        pass
