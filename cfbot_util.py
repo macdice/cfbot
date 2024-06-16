@@ -3,10 +3,19 @@ import pg8000
 import requests
 import time
 
+global_http_session = None
+
+def get_http_session():
+  """A session allowing for HTTP connection reuse."""
+  global global_http_session
+  if global_http_session == None:
+    global_http_session = requests.Session()
+  return global_http_session
+
 def slow_fetch(url):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
      commitfest server."""
-  response = requests.get(url, headers={'User-Agent': cfbot_config.USER_AGENT}, timeout=cfbot_config.TIMEOUT)
+  response = get_http_session().get(url, headers={'User-Agent': cfbot_config.USER_AGENT}, timeout=cfbot_config.TIMEOUT)
   response.raise_for_status()
   time.sleep(cfbot_config.SLOW_FETCH_SLEEP)
   return response.text
@@ -14,7 +23,7 @@ def slow_fetch(url):
 def slow_fetch_binary(url, none_for_404=False):
   """Fetch the body of a web URL, but sleep every time too to be kind to the
      commitfest server."""
-  response = requests.get(url, headers={'User-Agent': cfbot_config.USER_AGENT}, timeout=cfbot_config.TIMEOUT)
+  response = get_http_session().get(url, headers={'User-Agent': cfbot_config.USER_AGENT}, timeout=cfbot_config.TIMEOUT)
   if response.status_code == 404 and none_for_404:
     return None
   response.raise_for_status()
