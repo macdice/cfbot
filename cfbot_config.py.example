@@ -6,6 +6,8 @@ import sys
 GITHUB_USER=None
 GITHUB_REPO="postgres"
 
+GITHUB_FULL_REPO=f"{GITHUB_USER}/{GITHUB_REPO}"
+
 # which CI providers are enabled
 CI_MODULES = ("cirrus",)
 
