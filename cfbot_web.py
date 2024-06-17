@@ -22,18 +22,24 @@ OLD_SUCCESS = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" wid
   <path stroke-width="3" fill="none" stroke="green" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
 </svg>"""
 
+NEEDS_REBASE_SUCCESS = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+  <title>%s</title>
+  <circle stroke-width="3" cx="26" cy="26" r="25" stroke="#ff8f00" fill="none"/>
+  <path stroke-width="5" fill="none" stroke="#ff8f00" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
+</svg>"""
+
 NEW_FAILURE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
   <circle cx="26" cy="26" r="25" fill="red"/>
-  <path stroke-width="3" fill="none" stroke="white" d="M17 17 35 35"/>
-  <path stroke-width="3" fill="none" stroke="white" d="M17 35 35 17"/>
+  <path stroke-width="5" fill="none" stroke="white" d="M17 17 35 35"/>
+  <path stroke-width="5" fill="none" stroke="white" d="M17 35 35 17"/>
 </svg>"""
 
 OLD_FAILURE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
   <title>%s</title>
-  <circle cx="26" cy="26" r="25" stroke="red" fill="none"/>
-  <path stroke-width="3" fill="none" stroke="red" d="M17 17 35 35"/>
-  <path stroke-width="3" fill="none" stroke="red" d="M17 35 35 17"/>
+  <circle stroke-width="3" cx="26" cy="26" r="25" stroke="red" fill="none"/>
+  <path stroke-width="4" fill="none" stroke="red" d="M17 17 35 35"/>
+  <path stroke-width="4" fill="none" stroke="red" d="M17 35 35 17"/>
 </svg>"""
 
 WAITING_TO_START = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
@@ -276,10 +282,10 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       <a href="https://commitfest.postgresql.org/%s">Commitfest system</a> into
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">branches on Github</a>,
       and collates test results from
-      <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>.  Key: %s or %s = new/recently changed, %s or %s = stable, %s = working.
+      <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>.  Key: %s or %s = new/recently changed, %s or %s = stable, %s needs rebase but previous build was successful, %s = working.
     </p>
     <table>
-""" % (commitfest_id_for_link, NEW_SUCCESS, NEW_FAILURE, OLD_SUCCESS, OLD_FAILURE, building(0.3)))
+""" % (commitfest_id_for_link, NEW_SUCCESS, NEW_FAILURE, OLD_SUCCESS, OLD_FAILURE, NEEDS_REBASE_SUCCESS, building(0.3)))
     for submission in submissions:
 
       # skip if we need to filter by commitfest
@@ -311,7 +317,10 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       for build_result in submission.build_results:
         alt = build_result.task_name + ": " + build_result.status
         if build_result.status == "COMPLETED":
-          if build_result.new:
+          if submission.apply_failed_url:
+            alt += " (rebase needed)"
+            html = NEEDS_REBASE_SUCCESS
+          elif build_result.new:
             alt += " (new)"
             html = NEW_SUCCESS
           else:
