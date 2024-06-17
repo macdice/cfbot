@@ -117,8 +117,8 @@ def update_patchbase_tree(repo_dir):
 def get_commit_id(repo_dir):
   return subprocess.check_output("cd %s && git show | head -1 | cut -d' ' -f2" % repo_dir, shell=True).decode('utf-8').strip()
 
-def make_branch(burner_repo_path, commitfest_id, submission_id):
-  branch = "commitfest/%s/%s" % (commitfest_id, submission_id)
+def make_branch(burner_repo_path, submission_id):
+  branch = f"commitfest/{submission_id}"
   logging.info("creating branch %s" % branch)
   # blow away the branch if it exists already
   subprocess.call("""cd %s && git branch -q -D %s > /dev/null 2> /dev/null""" % (burner_repo_path, branch), shell=True) # ignore failure
@@ -210,7 +210,7 @@ def process_submission(conn, commitfest_id, submission_id):
     with open(dest, "wb+") as f:
       f.write(cfbot_util.slow_fetch_binary(patch_url))
   # we applied the patch; now make it into a branch with a commit on it
-  branch = make_branch(burner_repo_path, commitfest_id, submission_id)
+  branch = make_branch(burner_repo_path, submission_id)
   # apply the patches inside the jail
   output, rcode = patchburner_ctl("apply", want_rcode=True)
   # write the patch output to a public log file
