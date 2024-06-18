@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import cfbot_commitfest_rpc
 import cfbot_config

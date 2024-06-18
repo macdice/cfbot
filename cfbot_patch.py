@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Figure out which submission most needs to be pushed into a new branch for
 # building and testing.  Goals:
