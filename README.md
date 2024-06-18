@@ -38,7 +38,7 @@ pip install -r requirements.txt
 On Linux
 
 ```bash
-./cfbot_patchburner_chroot_ctl.sh init-template
+./cfbot_patchburner_docker_ctl.sh init-template
 ```
 
 On FreeBSD

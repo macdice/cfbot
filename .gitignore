@@ -3,6 +3,7 @@
 /www/
 /patchburner_template/
 /patchburner_chroot/
+/patchburner_docker/
 
 
 # Python junk

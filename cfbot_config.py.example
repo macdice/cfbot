@@ -29,7 +29,7 @@ DSN="cfbot"
 
 # patch settings
 if platform.system() == "Linux":
-  PATCHBURNER_CTL="./cfbot_patchburner_chroot_ctl.sh"
+  PATCHBURNER_CTL="./cfbot_patchburner_docker_ctl.sh"
 else:
   PATCHBURNER_CTL="sudo /usr/local/sbin/cfbot_patchburner_ctl.sh"
 
