@@ -1,5 +1,6 @@
 import logging
 import sys
+import platform
 
 # Fill in your GitHub username here. If this is None, we won't push to GitHub
 # unless you change GIT_REMOTE_NAME.
