@@ -153,6 +153,9 @@ EOF
 apply_patches_in_patchburner()
 {
   sudo chroot --userspec=$RUNAS_USER $CHROOT_DIR /work/apply-patches.sh
+  rm -rf $CHROOT_DIR/work/postgresql/.git/hooks
+  rm -rf $CHROOT_DIR/work/postgresql/.git/config
+  cp $TEMPLATE_DIR/work/postgresql/.git/config $CHROOT_DIR/work/postgresql/.git/config
 }
 
 case $1 in

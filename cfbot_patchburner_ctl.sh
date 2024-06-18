@@ -141,6 +141,9 @@ apply_patches_in_patchburner()
   jexec -U $CFBOT_USER $JAIL_NAME /work/apply-patches.sh
   result=$?
   ezjail-admin stop $JAIL_NAME > /dev/null
+  rm -rf $HOST_ROOT_PATH/work/postgresql/.git/hooks
+  rm -rf $HOST_ROOT_PATH/work/postgresql/.git/config
+  cp $TEMPLATE_HOST_ROOT_PATH/work/postgresql/.git/config $HOST_ROOT_PATH/work/postgresql/.git/config
   exit $result
 }
 

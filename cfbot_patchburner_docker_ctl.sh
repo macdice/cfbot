@@ -52,6 +52,9 @@ create_patchburner()
 apply_patches_in_patchburner()
 {
   docker run --mount=type=bind,source=$PWD/$MOUNTED_DIR/work,target=/work --workdir=/work/postgresql -u $(id -u):$(id -g) cfbot-patchburner /usr/local/bin/apply-patches.sh
+  rm -rf $MOUNTED_DIR/work/postgresql/.git/hooks
+  rm -rf $MOUNTED_DIR/work/postgresql/.git/config
+  cp $TEMPLATE_DIR/work/postgresql/.git/config $MOUNTED_DIR/work/postgresql/.git/config
 }
 
 case $1 in
