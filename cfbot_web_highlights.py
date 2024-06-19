@@ -181,7 +181,7 @@ select s.name,
               <td width="10%%" id="%s">%d/%d</td>
               <td width="90%%">%s</td>
             </tr>""" %
-            (submission_id, commitfest_id, submission_id, name,))
+            (submission_id, commitfest_id, submission_id, html.escape(name),))
         last_submission_id = submission_id
         if last_task_id != task_id:
             if status == "COMPLETED":
@@ -193,7 +193,7 @@ select s.name,
               <td width="10%%" align="right"><a href="https://cirrus-ci.com/task/%s">%s</a></td>
               <td width="90%%"><a href="https://cirrus-ci.com/task/%s">%s</td></td>
             </tr>""" %
-                    (task_id, icon, task_id, task_name))
+                    (task_id, icon, task_id, html.escape(task_name)))
         last_task_id = task_id
 
         if source.startswith("artifact:"):
@@ -216,7 +216,7 @@ select s.name,
             <td width="90%%"><pre style="font-size: 9px">%s</pre></td>
           </tr>
     """ %
-                (url, type, html.escape(narrow_excerpt)))
+                (url, html.escape(type), html.escape(narrow_excerpt)))
 
     f.write("""
     </table>

@@ -7,6 +7,7 @@ import math
 import os
 import re
 import unicodedata
+from html import escape as html_escape
 
 from cfbot_commitfest_rpc import Submission
 
@@ -299,7 +300,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # create a new heading row if this is a new CF status
       status = submission.status
       if last_status == None or last_status != status:
-        f.write("""      <tr><td colspan="5"><h2>%s</h2></td></tr>\n""" % status)
+        f.write("""      <tr><td colspan="5"><h2>%s</h2></td></tr>\n""" % html_escape(status))
         last_status = status
 
       name = submission.name
@@ -309,7 +310,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       # convert list of authors into links
       author_links = []
       for author in all_authors(submission):
-        author_links.append("""<a href="%s">%s</a>""" % (make_author_url(author), author))
+        author_links.append("""<a href="%s">%s</a>""" % (html_escape(make_author_url(author), quote=True), html_escape(author)))
       author_links_string = ", ".join(author_links)
 
       # construct build results
@@ -348,22 +349,22 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
           if fraction >= 0.9:
             fraction = 0.9
           html = building(fraction)
-        html = html % alt
+        html = html % html_escape(alt)
         if build_result.url:
-          html = """<a href="%s">%s</a>""" % (build_result.url, html)
+          html = """<a href="%s">%s</a>""" % (html_escape(build_result.url, quote=True), html)
         build_results += "&nbsp;" + html
 
       # construct email link
       patch_html = ""
       if submission.apply_failed_url:
         if submission.apply_failed_since:
-          patch_html += """<a title="Rebase needed since %s" href="%s">\u2672</a>""" % (submission.apply_failed_since, submission.apply_failed_url)
+          patch_html += """<a title="Rebase needed since %s" href="%s">\u2672</a>""" % (submission.apply_failed_since, html_escape(submission.apply_failed_url, quote=True))
         else:
-          patch_html += """<a title="Rebase needed" href="%s">\u2672</a>""" % submission.apply_failed_url
+          patch_html += """<a title="Rebase needed" href="%s">\u2672</a>""" % html_escape(submission.apply_failed_url, quote=True)
       if submission.has_highlights:
-          patch_html += """&nbsp;<a title="Interesting log excerpts found: %s" href="/highlights/all.html#%s">\u26a0</a>""" % (", ".join(submission.has_highlights), submission.id)
+          patch_html += """&nbsp;<a title="Interesting log excerpts found: %s" href="/highlights/all.html#%s">\u26a0</a>""" % (html_escape(", ".join(submission.has_highlights), quote=True), submission.id)
       if submission.last_branch_message_id:
-        patch_html += """&nbsp;<a title="Patch email" href="https://www.postgresql.org/message-id/%s">\u2709</a>""" % submission.last_branch_message_id
+        patch_html += """&nbsp;<a title="Patch email" href="https://www.postgresql.org/message-id/%s">\u2709</a>""" % html_escape(submission.last_branch_message_id, quote=True)
       branch = f"cf/{submission.id}"
       patch_html += f"""&nbsp;<a title="Diff on GitHub" href="https://github.com/{cfbot_config.GITHUB_FULL_REPO}/compare/{branch}~1...{branch}">D</a>"""
       patch_html += f"""&nbsp;<a title="Test history" href="https://cirrus-ci.com/github/{cfbot_config.GITHUB_FULL_REPO}/{branch}">H</a>"""
@@ -376,7 +377,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
         <td width="20%%">%s</td>
         <td width="5%%" align="right">%s</td>
         <td width="25%%">%s</td>
-""" % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, name, author_links_string, patch_html, build_results))
+""" % (submission.commitfest_id, submission.id, submission.commitfest_id, submission.id, html_escape(name), author_links_string, patch_html, build_results))
       f.write("      </tr>\n")
     f.write("""
     </table>
