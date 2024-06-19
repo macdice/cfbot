@@ -4,6 +4,7 @@
 /patchburner_template/
 /patchburner_chroot/
 /patchburner_docker/
+/patchburner_podman/
 
 
 # Python junk

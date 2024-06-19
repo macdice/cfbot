@@ -1,6 +1,7 @@
 import logging
 import sys
 import platform
+import shutil
 
 # Fill in your GitHub username here. If this is None, we won't push to GitHub
 # unless you change GIT_REMOTE_NAME.
@@ -29,7 +30,12 @@ DSN="cfbot"
 
 # patch settings
 if platform.system() == "Linux":
-  PATCHBURNER_CTL="./cfbot_patchburner_docker_ctl.sh"
+  if shutil.which("podman"):
+    PATCHBURNER_CTL="./cfbot_patchburner_podman_ctl.sh"
+  elif shutil.which("docker"):
+    PATCHBURNER_CTL="./cfbot_patchburner_docker_ctl.sh"
+  else:
+    PATCHBURNER_CTL="./cfbot_patchburner_chroot_ctl.sh"
 else:
   PATCHBURNER_CTL="sudo /usr/local/sbin/cfbot_patchburner_ctl.sh"
 
