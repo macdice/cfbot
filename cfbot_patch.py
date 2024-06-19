@@ -225,6 +225,9 @@ def process_submission(conn, commitfest_id, submission_id):
     logging.info("failed to apply (%s, %s)" % (commitfest_id, submission_id))
     cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, status, url, created, modified) VALUES (%s, %s, 'failed', %s, now(), now())""",
                    (commitfest_id, submission_id, log_url))
+    if not cfbot_config.PRODUCTION:
+      print(output)
+
   else:
     logging.info("applied patches for (%s, %s)" % (commitfest_id, submission_id))
     # we committed the patches; now add a final merge commit with some metadata
