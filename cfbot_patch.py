@@ -254,7 +254,9 @@ def process_submission(conn, commitfest_id, submission_id):
 
   # If we're not pushing to a remote, we can clean up the branch now. Otherwise
   # we'll leave it around so that we can see the results of patch apply.
-  if cfbot_config.GIT_REMOTE_NAME:
+  # Also if we're in a dev environment let's keep it around on failure to make
+  # debugging easier.
+  if cfbot_config.GIT_REMOTE_NAME and (cfbot_config.PRODUCTION or rcode == 0):
     patchburner_ctl("destroy")
 
 def maybe_process_one(conn, min_commitfest_id):
