@@ -32,6 +32,7 @@ ZFS_NAME=zroot/usr/jails/$JAIL_NAME
 HOST_ROOT_PATH=/usr/jails/$JAIL_NAME
 
 CFBOT_USER=cfbot
+CFBOT_UID=1002
 
 usage()
 {
@@ -51,7 +52,7 @@ usage()
 
 init_template()
 {
-  ezjail-admin create $TEMPLATE_JAIL_NAME 'lo1|127.0.1.0'
+  ezjail-admin create $TEMPLATE_JAIL_NAME 'lo2|127.0.1.0'
   ezjail-admin start $TEMPLATE_JAIL_NAME
   jexec $TEMPLATE_JAIL_NAME pw useradd -n $CFBOT_USER -u $CFBOT_UID
   ezjail-admin stop $TEMPLATE_JAIL_NAME
@@ -79,7 +80,7 @@ create_patchburner()
   # clone it
   zfs snapshot $TEMPLATE_ZFS_NAME@mysnapshot
   zfs clone    $TEMPLATE_ZFS_NAME@mysnapshot $ZFS_NAME
-  ezjail-admin create -x $JAIL_NAME 'lo1|127.0.1.2'
+  ezjail-admin create -x $JAIL_NAME 'lo2|127.0.1.2'
   mkdir $HOST_ROOT_PATH/work/patches
   chown $CFBOT_USER:$CFBOT_USER $HOST_ROOT_PATH/work/patches
   cat > $HOST_ROOT_PATH/work/apply-patches.sh <<'EOF'
