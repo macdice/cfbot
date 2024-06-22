@@ -17,6 +17,7 @@ import cfbot_config
 import cfbot_util
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -126,12 +127,14 @@ def make_branch(burner_repo_path, submission_id):
   subprocess.check_call("""cd %s && git checkout -q -b %s""" % (burner_repo_path, branch), shell=True)
   return branch
 
-def add_merge_commit(conn, burner_repo_path, commitfest_id, submission_id, message_id):
+def add_merge_commit(conn, burner_repo_path, commitfest_id, submission_id, message_id, version):
   # look up the data we need to make a friendly commit message
   cursor = conn.cursor()
   cursor.execute("""SELECT name, authors FROM submission WHERE commitfest_id = %s AND submission_id = %s""",
                  (commitfest_id, submission_id))
   name, authors = cursor.fetchone()
+  if version:
+    name = f'{version} - {name}'
   # compose the commit message
   commit_message = """[CF %s/%s] %s
 
@@ -203,9 +206,12 @@ def process_submission(conn, commitfest_id, submission_id):
     logging.info("skipping submission %s with no thread" % submission_id)
     return
   message_id, patch_urls = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(thread_url)
+  version = None
   for patch_url in patch_urls:
     parsed = urlparse(patch_url)
     filename = os.path.basename(parsed.path)
+    if not version and re.match(r'v\d+-', filename):
+      version = filename.split('-')[0]
     dest = os.path.join(patch_dir, filename)
     with open(dest, "wb+") as f:
       f.write(cfbot_util.slow_fetch_binary(patch_url))
@@ -231,7 +237,7 @@ def process_submission(conn, commitfest_id, submission_id):
   else:
     logging.info("applied patches for (%s, %s)" % (commitfest_id, submission_id))
     # we committed the patches; now add a final merge commit with some metadata
-    add_merge_commit(conn, burner_repo_path, commitfest_id, submission_id, message_id)
+    add_merge_commit(conn, burner_repo_path, commitfest_id, submission_id, message_id, version)
     # push it to the remote monitored repo, if configured
     if cfbot_config.GIT_REMOTE_NAME:
       logging.info("pushing branch %s" % branch)
