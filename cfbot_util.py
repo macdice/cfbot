@@ -30,6 +30,9 @@ def slow_fetch_binary(url, none_for_404=False):
   time.sleep(cfbot_config.SLOW_FETCH_SLEEP)
   return response.content
 
+def post(url, d):
+   get_http_session().post(url, headers={'User-Agent': cfbot_config.USER_AGENT}, data=d, timeout=cfbot_config.TIMEOUT)
+
 def gc(conn):
   cursor = conn.cursor()
   cursor.execute("""DELETE FROM task WHERE created < now() - interval '6 months'""")

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import cfbot_commitfest
 import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
@@ -31,7 +32,7 @@ def highlight_patterns(cursor, task_id, source, patterns, line, types):
             break
 
 def retry_limit(type):
-    if type.startswith("fetch-"):
+    if type.startswith("fetch-") or type.startswith("post-"):
         # Things that hit network APIs get multiple retries
         return 3
 
@@ -392,6 +393,8 @@ def process_one_job(conn, fetch_only):
       analyze_task_tests(conn, key)
     elif type == "refresh-highlight-pages":
       refresh_highlight_pages(conn, key)
+    elif type == "post-task-status":
+      cfbot_commitfest.post_task_status(conn, key)
     else:
       pass
 

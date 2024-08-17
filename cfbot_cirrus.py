@@ -125,6 +125,10 @@ def pull_build_results(conn):
                                      modified = now()
                                WHERE task_id = %s""",
                            (status, task_id))
+            # tell the commitfest app
+            cursor.execute("""INSERT into work_queue (type, key, status)
+                              VALUES ('post-task-status', %s, 'NEW')""",
+                           (task_id,))
             # if we reached a final state then it is time to pull down the
             # artifacts (without bodies) and task commands (steps)
             if not task_still_running:

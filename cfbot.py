@@ -45,8 +45,6 @@ def run():
     cfbot_commitfest.pull_submissions(conn, commitfest_id + 1)
     logging.info("pulling modified threads")
     cfbot_commitfest.pull_modified_threads(conn)
-    logging.info("pushing build results")
-    cfbot_commitfest.push_build_results(conn)
 
     # build one patch, if it is time for that
     cfbot_patch.maybe_process_one(conn, commitfest_id)
