@@ -7,6 +7,7 @@
 import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
+import json
 
 import logging
 
@@ -101,6 +102,7 @@ def make_task_status_message(conn, task_id):
                  (task_id,))
   commit_id, task_name, position, status, created, modified = cursor.fetchone()
   message = {
+          "task_id": task_id,
           "commit_id": commit_id,
           "task_name": task_name,
           "position": position,
@@ -133,14 +135,14 @@ def process_branch_update_job(conn, commit_id):
   if cfbot_config.COMMITFEST_POST_URL:
     cfbot_util.post(cfbot_config.COMMITFEST_POST_URL, message)
   else:
-    logging.info("would post to cf app: " + str(message))
+    logging.info("would post to cf app: " + json.dumps(message))
 
 def post_task_status(conn, task_id):
   message = make_task_update_message(conn, task_id)
   if cfbot_config.COMMITFEST_POST_URL:
     cfbot_util.post(cfbot_config.COMMITFEST_POST_URL, message)
   else:
-    logging.info("would post to cf app: " + str(message))
+    logging.info("would post to cf app: " + json.dumps(message))
 
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
