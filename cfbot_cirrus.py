@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import cfbot_config
 import cfbot_util
 

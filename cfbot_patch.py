@@ -229,8 +229,10 @@ def process_submission(conn, commitfest_id, submission_id):
   if rcode != 0:
     # we failed to apply the patches
     logging.info("failed to apply (%s, %s)" % (commitfest_id, submission_id))
-    cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, status, url, created, modified) VALUES (%s, %s, 'failed', %s, now(), now())""",
+    cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, status, url, created, modified) VALUES (%s, %s, 'failed', %s, now(), now()) RETURNING id""",
                    (commitfest_id, submission_id, log_url))
+    branch_id, = cursor.fetchone()
+    cursor.execute("""INSERT INTO work_queue (type, key, status) VALUES ('post-branch-status', %s, 'NEW')""", (branch_id,))
     if not cfbot_config.PRODUCTION:
       print(output)
 
@@ -246,8 +248,11 @@ def process_submission(conn, commitfest_id, submission_id):
       subprocess.check_call("cd %s && git push -q -f %s %s" % (burner_repo_path, cfbot_config.GIT_REMOTE_NAME, branch), env=my_env, shell=True, stderr=subprocess.DEVNULL)
     # record the apply status
     ci_commit_id = get_commit_id(burner_repo_path)
-    cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, commit_id, status, url, created, modified) VALUES (%s, %s, %s, 'testing', %s, now(), now())""",
+    cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, commit_id, status, url, created, modified) VALUES (%s, %s, %s, 'testing', %s, now(), now()) RETURNING id""",
                    (commitfest_id, submission_id, ci_commit_id, log_url))
+    branch_id, = cursor.fetchone()
+    cursor.execute("""INSERT INTO work_queue (type, key, status) VALUES ('post-branch-status', %s, 'NEW')""", (branch_id,))
+
   # record that we have processed this commit ID and message ID
   #
   # Unfortunately we also have to clobber last_message_id to avoid getting

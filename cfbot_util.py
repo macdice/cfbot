@@ -31,7 +31,7 @@ def slow_fetch_binary(url, none_for_404=False):
   return response.content
 
 def post(url, d):
-   get_http_session().post(url, headers={'User-Agent': cfbot_config.USER_AGENT}, data=d, timeout=cfbot_config.TIMEOUT)
+   get_http_session().post(url, headers={'User-Agent': cfbot_config.USER_AGENT}, json=d, timeout=cfbot_config.TIMEOUT)
 
 def gc(conn):
   cursor = conn.cursor()

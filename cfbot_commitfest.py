@@ -75,7 +75,27 @@ def pull_modified_threads(conn):
                     (last_email_time, message_id, commitfest_id, submission_id))
     conn.commit()
 
-def make_branch_status_message(conn, commit_id):
+def make_branch_status_message(conn, branch_id):
+  cursor = conn.cursor()
+  cursor.execute("""SELECT commit_id, submission_id, url, status, created, modified
+                      FROM branch
+                     WHERE id = %s""",
+                 (branch_id,))
+  commit_id, submission_id, url, status, created, modified = cursor.fetchone()
+  message = {
+          "submission_id": submission_id,
+          "branch_name": "cf/%d" % submission_id,
+          "branch_id": branch_id,
+          "commit_id": commit_id,
+          "apply_url": url,
+          "status": status,
+          "created": created.isoformat(),
+          "modified": modified.isoformat(),
+  }
+  return message
+
+
+def make_branch_status_message_by_commit_id(conn, commit_id):
   cursor = conn.cursor()
   cursor.execute("""SELECT id, submission_id, url, status, created, modified
                       FROM branch
@@ -114,7 +134,7 @@ def make_task_status_message(conn, task_id):
 
 def make_task_update_message(conn, task_id):
   task_status = make_task_status_message(conn, task_id)
-  branch_status = make_branch_status_message(conn, task_status["commit_id"])
+  branch_status = make_branch_status_message_by_commit_id(conn, task_status["commit_id"])
   message = {
           "shared_secret": cfbot_config.COMMITFEST_SHARED_SECRET,
           "task_status": task_status,
@@ -122,16 +142,17 @@ def make_task_update_message(conn, task_id):
   }
   return message
 
-def make_branch_update_message(conn, commit_id):
-  branch_status = make_branch_status_message(conn, commit_id)
+def make_branch_update_message(conn, branch_id):
+  branch_status = make_branch_status_message(conn, branch_id)
   message = {
           "shared_secret": cfbot_config.COMMITFEST_SHARED_SECRET,
           "branch_status": branch_status,
   }
   return message
 
-def process_branch_update_job(conn, commit_id):
-  message = make_branch_update_message(conn, commit_id)
+def post_branch_status(conn, branch_id):
+  
+  message = make_branch_update_message(conn, branch_id)
   if cfbot_config.COMMITFEST_POST_URL:
     cfbot_util.post(cfbot_config.COMMITFEST_POST_URL, message)
   else:
