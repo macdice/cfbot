@@ -395,6 +395,8 @@ def process_one_job(conn, fetch_only):
       refresh_highlight_pages(conn, key)
     elif type == "post-task-status":
       cfbot_commitfest.post_task_status(conn, key)
+    elif type == "post-branch-status":
+      cfbot_commitfest.post_branch_status(conn, key)
     else:
       pass
 
