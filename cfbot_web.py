@@ -11,42 +11,41 @@ from html import escape as html_escape
 
 from cfbot_commitfest_rpc import Submission
 
-NEW_SUCCESS = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
-  <title>%s</title>
-  <circle cx="26" cy="26" r="25" fill="green"/>
-  <path stroke-width="3" fill="none" stroke="white" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
-</svg>"""
+# Define SVG content
+SVG_CONTENT = {
+    "new_success": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+      <circle cx="26" cy="26" r="25" fill="green"/>
+      <path stroke-width="3" fill="none" stroke="white" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
+    </svg>""",
+    "old_success": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+      <circle cx="26" cy="26" r="25" stroke="green" fill="none"/>
+      <path stroke-width="3" fill="none" stroke="green" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
+    </svg>""",
+    "needs_rebase_success": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+      <circle stroke-width="3" cx="26" cy="26" r="25" stroke="#ff8f00" fill="none"/>
+      <path stroke-width="5" fill="none" stroke="#ff8f00" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
+    </svg>""",
+    "new_failure": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+      <circle cx="26" cy="26" r="25" fill="red"/>
+      <path stroke-width="5" fill="none" stroke="white" d="M17 17 35 35"/>
+      <path stroke-width="5" fill="none" stroke="white" d="M17 35 35 17"/>
+    </svg>""",
+    "old_failure": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+      <circle stroke-width="3" cx="26" cy="26" r="25" stroke="red" fill="none"/>
+      <path stroke-width="4" fill="none" stroke="red" d="M17 17 35 35"/>
+      <path stroke-width="4" fill="none" stroke="red" d="M17 35 35 17"/>
+    </svg>""",
+    "waiting_to_start": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+      <circle cx="26" cy="26" r="25" stroke="gray" fill="none"/>
+    </svg>"""
+}
 
-OLD_SUCCESS = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
-  <title>%s</title>
-  <circle cx="26" cy="26" r="25" stroke="green" fill="none"/>
-  <path stroke-width="3" fill="none" stroke="green" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
-</svg>"""
-
-NEEDS_REBASE_SUCCESS = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
-  <title>%s</title>
-  <circle stroke-width="3" cx="26" cy="26" r="25" stroke="#ff8f00" fill="none"/>
-  <path stroke-width="5" fill="none" stroke="#ff8f00" d="M14.1 27.2 l7.1 7.2 16.7-16.8"/>
-</svg>"""
-
-NEW_FAILURE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
-  <title>%s</title>
-  <circle cx="26" cy="26" r="25" fill="red"/>
-  <path stroke-width="5" fill="none" stroke="white" d="M17 17 35 35"/>
-  <path stroke-width="5" fill="none" stroke="white" d="M17 35 35 17"/>
-</svg>"""
-
-OLD_FAILURE = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
-  <title>%s</title>
-  <circle stroke-width="3" cx="26" cy="26" r="25" stroke="red" fill="none"/>
-  <path stroke-width="4" fill="none" stroke="red" d="M17 17 35 35"/>
-  <path stroke-width="4" fill="none" stroke="red" d="M17 35 35 17"/>
-</svg>"""
-
-WAITING_TO_START = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
-  <title>%s</title>
-  <circle cx="26" cy="26" r="25" stroke="gray" fill="none"/>
-</svg>"""
+# Generate HTML with <img> tag for a specific SVG type
+def svg_img(svg_type):
+    if svg_type not in SVG_CONTENT:
+        raise ValueError(f"Invalid SVG type: {svg_type}")
+    html_template = '<img src="{src}" alt="" width="20" height="20"/>'
+    return html_template.format(src=f"{svg_type}.svg")
 
 def building(fraction):
   if fraction > 0.5:
@@ -56,7 +55,6 @@ def building(fraction):
   fraction = float(fraction)
   fraction -= 0.25
   return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
-  <title>%%s</title>
   <circle cx="26" cy="26" r="25" stroke="blue" fill="none"/>
   <path d="M26 26 L26 1 A25 25 0 %s 1 %s %s Z" fill="blue"/>
 </svg>""" % (large, 26 + 25 * math.cos(math.pi * (fraction * 2)), 26 + 25 * math.sin(math.pi * (fraction * 2)))
@@ -231,9 +229,12 @@ def make_author_url(author):
 
 def all_authors(submission):
   return submission.authors
- 
+
+
 def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activity_message, path):
   """Build a web page that lists all known entries and shows the badges."""
+
+  save_svgs()
 
   expected_runtimes = load_expected_runtimes(conn)
   last_status = None
@@ -286,7 +287,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>.  Key: %s or %s = new/recently changed, %s or %s = stable, %s needs rebase but previous build was successful, %s = working.
     </p>
     <table>
-""" % (commitfest_id_for_link, NEW_SUCCESS, NEW_FAILURE, OLD_SUCCESS, OLD_FAILURE, NEEDS_REBASE_SUCCESS, building(0.3)))
+""" % (commitfest_id_for_link, svg_img('new_success'), svg_img('new_failure'), svg_img('old_success'), svg_img('old_failure'), svg_img('needs_rebase_success'), building(0.3)))
     for submission in submissions:
 
       # skip if we need to filter by commitfest
@@ -318,22 +319,22 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
       for build_result in submission.build_results:
         alt = build_result.task_name + ": " + build_result.status
         if build_result.status == "COMPLETED":
-          if submission.apply_failed_url:
-            alt += " (rebase needed)"
-            html = NEEDS_REBASE_SUCCESS
-          elif build_result.new:
-            alt += " (new)"
-            html = NEW_SUCCESS
-          else:
-            html = OLD_SUCCESS
+            if submission.apply_failed_url:
+                alt += " (rebase needed)"
+                html = svg_img('needs_rebase_success')
+            elif build_result.new:
+                alt += " (new)"
+                html = svg_img('new_success')
+            else:
+                html = svg_img('old_success')
         elif build_result.status in ("FAILED", "ABORTED", "ERRORED"):
-          if build_result.new:
-            alt += " (new)"
-            html = NEW_FAILURE
-          else:
-            html = OLD_FAILURE
-        elif build_result.status in ("CREATED"):
-            html = WAITING_TO_START
+            if build_result.new:
+                alt += " (new)"
+                html = svg_img('new_failure')
+            else:
+                html = svg_img('old_failure')
+        elif build_result.status == "CREATED":
+            html = svg_img('waiting_to_start')
         else:
           # hocus pocus time prediction
           if build_result.task_name in expected_runtimes:
@@ -349,9 +350,8 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
           if fraction >= 0.9:
             fraction = 0.9
           html = building(fraction)
-        html = html % html_escape(alt)
         if build_result.url:
-          html = """<a href="%s">%s</a>""" % (html_escape(build_result.url, quote=True), html)
+          html = """<a href="%s" title="%s">%s</a>""" % (html_escape(build_result.url, quote=True), html_escape(alt), html)
         build_results += "&nbsp;" + html
 
       # construct email link
@@ -385,6 +385,19 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
 </html>
 """)
   os.rename(path + ".tmp", path)
+
+
+# Save SVG content to files
+def save_svgs():
+    if not os.path.exists(cfbot_config.WEB_ROOT):
+        os.makedirs(cfbot_config.WEB_ROOT)
+    for name, content in SVG_CONTENT.items():
+        with open(os.path.join(cfbot_config.WEB_ROOT, f"{name}.svg"), "r") as file:
+            if file.read() == content:
+                continue
+        with open(os.path.join(cfbot_config.WEB_ROOT, f"{name}.svg"), "w") as file:
+            file.write(content)
+
 
 def unique_authors(submissions):
   results = []
