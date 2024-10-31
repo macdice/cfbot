@@ -185,9 +185,9 @@ select s.name,
         last_submission_id = submission_id
         if last_task_id != task_id:
             if status == "COMPLETED":
-                icon = cfbot_web.NEW_SUCCESS
+                icon = cfbot_web.svg_img("new_success")
             else:
-                icon = cfbot_web.NEW_FAILURE
+                icon = cfbot_web.svg_img("new_failure")
             f.write("""
             <tr>
               <td width="10%%" align="right"><a href="https://cirrus-ci.com/task/%s">%s</a></td>
