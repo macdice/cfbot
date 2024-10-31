@@ -392,10 +392,12 @@ def save_svgs():
     if not os.path.exists(cfbot_config.WEB_ROOT):
         os.makedirs(cfbot_config.WEB_ROOT)
     for name, content in SVG_CONTENT.items():
-        with open(os.path.join(cfbot_config.WEB_ROOT, f"{name}.svg"), "r") as file:
-            if file.read() == content:
-                continue
-        with open(os.path.join(cfbot_config.WEB_ROOT, f"{name}.svg"), "w") as file:
+        file_path = os.path.join(cfbot_config.WEB_ROOT, f"{name}.svg")
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                if file.read() == content:
+                    continue
+        with open(file_path, "w") as file:
             file.write(content)
 
 
