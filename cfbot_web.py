@@ -333,7 +333,7 @@ def build_page(conn, commit_id, commitfest_id, submissions, filter_author, activ
                 html = svg_img('new_failure')
             else:
                 html = svg_img('old_failure')
-        elif build_result.status == "CREATED":
+        elif build_result.status in ("CREATED", "SCHEDULED"):
             html = svg_img('waiting_to_start')
         else:
           # hocus pocus time prediction
