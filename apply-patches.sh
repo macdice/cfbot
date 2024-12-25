@@ -50,6 +50,8 @@ for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort) 
   MESSAGE="${SUBJECT:-"[PATCH]: $f"}${MESSAGE:+
 
 }${MESSAGE}"
+
   git apply --3way --allow-empty "/work/patches/$f" || { git diff && exit 1; }
   git commit -m "$MESSAGE" --author="${NAME:-Commitfest Bot} <${EMAIL:-cfbot@cputube.org}>" --date="${DATE:-now}" --allow-empty
+
 done

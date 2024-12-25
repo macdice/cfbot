@@ -90,6 +90,8 @@ create_patchburner()
 
 set -e
 
+date # Add a timestamp to the log
+
 # unpack and zip archives, tarballs etc
 cd /work/patches
 for f in $(find . -name '*.tgz' -o -name '*.tar.gz' -o -name '*.tar.bz2') ; do
@@ -112,8 +114,15 @@ cd /work/postgresql
 git config user.name "Commitfest Bot"
 git config user.email "cfbot@cputube.org"
 
+# Somehow this is necessary to avoid "does not match index" when running "git apply"
+git status
+
 for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort) ; do
   echo "=== applying patch $f"
+
+  # This extracts the information from the patch, just like how "git am" would
+  # do it. But because not all patches are created with "git format-patch" this
+  # information, we need to do this manually and fallback to sensible defaults.
   git mailinfo ../msg ../patch < "/work/patches/$f" > ../info
   # Clean out /dev/null in case git mailinfo wrote something to it
   : > /dev/null
@@ -127,8 +136,7 @@ for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort) 
 
 }${MESSAGE}"
 
-  gpatch --no-backup-if-mismatch -p1 -V none -f < "/work/patches/$f"
-  git add .
+  git apply --3way --allow-empty "/work/patches/$f" || { git diff && exit 1; }
   git commit -m "$MESSAGE" --author="${NAME:-Commitfest Bot} <${EMAIL:-cfbot@cputube.org}>" --date="${DATE:-now}" --allow-empty
 
 done
