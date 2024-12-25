@@ -220,7 +220,7 @@ def process_submission(conn, commitfest_id, submission_id):
   # apply the patches inside the jail
   output, rcode = patchburner_ctl("apply", want_rcode=True)
   # write the patch output to a public log file
-  log_file = "patch_%d_%d.log" % (commitfest_id, submission_id)
+  log_file = f"patch_{submission_id}.log"
   with open(os.path.join(cfbot_config.WEB_ROOT, log_file), "w+") as f:
     f.write("=== Applying patches on top of PostgreSQL commit ID %s ===\n" % (commit_id,))
     f.write(output)
