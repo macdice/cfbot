@@ -152,7 +152,7 @@ def make_branch_update_message(conn, branch_id):
 
 def post_branch_status(conn, branch_id):
   
-  message = make_branch_update_message(conn, branch_id)
+  message = make_branch_update_message(conn, int(branch_id))
   if cfbot_config.COMMITFEST_POST_URL:
     cfbot_util.post(cfbot_config.COMMITFEST_POST_URL, message)
   else:
