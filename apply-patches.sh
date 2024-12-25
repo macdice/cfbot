@@ -5,6 +5,8 @@
 
 set -e
 
+date # Add a timestamp to the log
+
 # unpack and zip archives, tarballs etc
 cd /work/patches
 for f in $(find . -name '*.tgz' -o -name '*.tar.gz' -o -name '*.tar.bz2') ; do
