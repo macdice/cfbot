@@ -18,6 +18,7 @@ import cfbot_util
 import logging
 import os
 import re
+import requests
 import shutil
 import subprocess
 import tempfile
@@ -198,7 +199,17 @@ def process_submission(conn, commitfest_id, submission_id):
   # fetch the patches from the thread and put them in the patchburner's
   # filesystem
   time.sleep(10) # argh, try to close race against slow archives
-  thread_url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
+
+  try:
+    thread_url = cfbot_commitfest_rpc.get_thread_url_for_submission(commitfest_id, submission_id)
+  except requests.exceptions.HTTPError as e:
+    # We've seen some 404's here, probably due to a previously existing entry
+    # being deleted.
+    if e.response.status_code == 404:
+      thread_url = None
+    else:
+      raise
+
   if not thread_url:
     # CF entry with no thread attached?
     update_submission(conn, None, None, commitfest_id, submission_id)
