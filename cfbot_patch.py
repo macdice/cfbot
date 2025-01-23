@@ -19,12 +19,45 @@ import logging
 import os
 import re
 import requests
+import shlex
 import shutil
 import subprocess
 import tempfile
 import time
 import sys
 from urllib.parse import urlparse
+
+
+def eprint(*args, **kwargs):
+    """eprint prints to stderr"""
+
+    print(*args, file=sys.stderr, **kwargs)
+
+
+def run(command, *args, check=True, shell=None, silent=False, **kwargs):
+    """run runs the given command and prints it to stderr"""
+
+    if shell is None:
+        shell = isinstance(command, str)
+
+    if not shell:
+        command = list(map(str, command))
+
+    if not silent and not cfbot_config.PRODUCTION:
+        if shell:
+            eprint(f"+ {command}")
+        else:
+            # We could normally use shlex.join here, but it's not available in
+            # Python 3.6 which we still like to support
+            unsafe_string_cmd = " ".join(map(shlex.quote, command))
+            eprint(f"+ {unsafe_string_cmd}")
+
+    if silent:
+        kwargs.setdefault("stdout", subprocess.DEVNULL)
+    return subprocess.run(command, *args, check=check, shell=shell, **kwargs)
+
+def capture(command, *args, stdout=subprocess.PIPE, encoding="utf-8", **kwargs):
+    return run(command, *args, stdout=stdout, encoding=encoding, **kwargs).stdout
 
 def need_to_limit_rate(conn):
   """Have we pushed too many branches recently?"""
@@ -158,6 +191,11 @@ Author(s): %s
     current_commit = get_commit_id(burner_repo_path)
     subprocess.check_call(f"""cd {burner_repo_path} && git reset master --hard -q && git merge -q --no-ff -F {tmp.name} {current_commit}""", shell=True)
 
+def git_shortstat(path, commit):
+    shortstat = capture(["git", "diff", "--shortstat", "master", commit], cwd=path)
+    elements = shortstat.split(" ")
+    return int(elements[4]), int(elements[6])
+
 def patchburner_ctl(command, want_rcode=False):
   """Invoke the patchburner control script."""
   if want_rcode:
@@ -249,8 +287,15 @@ def process_submission(conn, commitfest_id, submission_id):
 
   else:
     logging.info("applied patches for (%s, %s)" % (commitfest_id, submission_id))
+    first_commit = capture("git rev-list --topo-order master..HEAD | tail -n 1",
+                           cwd=burner_repo_path).strip()
+    commit_count = int(capture("git rev-list --topo-order master..HEAD | wc -l",
+                               cwd=burner_repo_path).strip())
+
     # we committed the patches; now add a final merge commit with some metadata
     add_merge_commit(conn, burner_repo_path, commitfest_id, submission_id, message_id, version)
+    first_additions, first_deletions = git_shortstat(burner_repo_path, first_commit)
+    all_additions, all_deletions = git_shortstat(burner_repo_path, "HEAD")
     # push it to the remote monitored repo, if configured
     if cfbot_config.GIT_REMOTE_NAME:
       logging.info("pushing branch %s" % branch)
@@ -259,8 +304,19 @@ def process_submission(conn, commitfest_id, submission_id):
       subprocess.check_call("cd %s && git push -q -f %s %s" % (burner_repo_path, cfbot_config.GIT_REMOTE_NAME, branch), env=my_env, shell=True, stderr=subprocess.DEVNULL)
     # record the apply status
     ci_commit_id = get_commit_id(burner_repo_path)
-    cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, commit_id, status, url, created, modified) VALUES (%s, %s, %s, 'testing', %s, now(), now()) RETURNING id""",
-                   (commitfest_id, submission_id, ci_commit_id, log_url))
+    cursor.execute("""INSERT INTO branch (commitfest_id, submission_id, commit_id, status, url, created, modified, version, patch_count, first_additions, first_deletions, all_additions, all_deletions) VALUES (%s, %s, %s, 'testing', %s, now(), now(), %s, %s, %s, %s, %s, %s) RETURNING id""",
+                (
+                   commitfest_id,
+                   submission_id,
+                   ci_commit_id,
+                   log_url,
+                   version,
+                   commit_count,
+                   first_additions,
+                   first_deletions,
+                   all_additions,
+                   all_deletions,
+                ))
     branch_id, = cursor.fetchone()
     cursor.execute("""INSERT INTO work_queue (type, key, status) VALUES ('post-branch-status', %s, 'NEW')""", (branch_id,))
 

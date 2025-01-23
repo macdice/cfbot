@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 12.12
--- Dumped by pg_dump version 12.12
+-- Dumped from database version 14.13
+-- Dumped by pg_dump version 14.13
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -47,7 +47,13 @@ CREATE TABLE public.branch (
     status text NOT NULL,
     url text,
     created timestamp with time zone NOT NULL,
-    modified timestamp with time zone NOT NULL
+    modified timestamp with time zone NOT NULL,
+    version text DEFAULT ''::text NOT NULL,
+    patch_count integer DEFAULT 0 NOT NULL,
+    first_additions integer DEFAULT 0 NOT NULL,
+    first_deletions integer DEFAULT 0 NOT NULL,
+    all_additions integer DEFAULT 0 NOT NULL,
+    all_deletions integer DEFAULT 0 NOT NULL
 );
 
 
@@ -163,6 +169,25 @@ CREATE TABLE public.test (
 ALTER TABLE public.test OWNER TO cfbot;
 
 --
+-- Name: test_statistics; Type: TABLE; Schema: public; Owner: cfbot
+--
+
+CREATE TABLE public.test_statistics (
+    submission_id integer NOT NULL,
+    task_name text NOT NULL,
+    command text NOT NULL,
+    suite text NOT NULL,
+    test text NOT NULL,
+    other_avg real,
+    patched_avg real,
+    t real,
+    p real
+);
+
+
+ALTER TABLE public.test_statistics OWNER TO cfbot;
+
+--
 -- Name: work_queue; Type: TABLE; Schema: public; Owner: cfbot
 --
 
@@ -255,11 +280,26 @@ ALTER TABLE ONLY public.test
 
 
 --
+-- Name: test_statistics test_statistics_pkey; Type: CONSTRAINT; Schema: public; Owner: cfbot
+--
+
+ALTER TABLE ONLY public.test_statistics
+    ADD CONSTRAINT test_statistics_pkey PRIMARY KEY (submission_id, task_name, command, suite, test);
+
+
+--
 -- Name: work_queue work_queue_pkey; Type: CONSTRAINT; Schema: public; Owner: cfbot
 --
 
 ALTER TABLE ONLY public.work_queue
     ADD CONSTRAINT work_queue_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: branch_submission_id_created_idx; Type: INDEX; Schema: public; Owner: cfbot
+--
+
+CREATE INDEX branch_submission_id_created_idx ON public.branch USING btree (submission_id, created);
 
 
 --
@@ -274,6 +314,20 @@ CREATE INDEX highlight_task_id_type_idx ON public.highlight USING btree (task_id
 --
 
 CREATE INDEX task_command_task_id_name_idx ON public.task_command USING btree (task_id, name);
+
+
+--
+-- Name: task_commit_id_idx; Type: INDEX; Schema: public; Owner: cfbot
+--
+
+CREATE INDEX task_commit_id_idx ON public.task USING btree (commit_id);
+
+
+--
+-- Name: task_submission_id_idx; Type: INDEX; Schema: public; Owner: cfbot
+--
+
+CREATE INDEX task_submission_id_idx ON public.task USING btree (submission_id);
 
 
 --
