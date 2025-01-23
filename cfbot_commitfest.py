@@ -83,7 +83,7 @@ def make_branch_status_message(conn, branch_id=None, commit_id=None):
   cursor = conn.cursor()
   cursor.execute(f"""SELECT id, commit_id, submission_id, url, status, created, modified,
                             version, patch_count,
-                            first_additions, last_additions,
+                            first_additions, first_deletions,
                             all_additions, all_deletions
                       FROM branch
                      WHERE {filter_column} = %s""",
@@ -93,7 +93,7 @@ def make_branch_status_message(conn, branch_id=None, commit_id=None):
     submission_id, url, status,
     created, modified,
     version, patch_count,
-    first_additions, last_additions,
+    first_additions, first_deletions,
     all_additions, all_deletions,
   )= cursor.fetchone()
   message = {
@@ -108,7 +108,7 @@ def make_branch_status_message(conn, branch_id=None, commit_id=None):
     "version": version,
     "patch_count": patch_count,
     "first_additions": first_additions,
-    "last_additions": last_additions,
+    "first_deletions": first_deletions,
     "all_additions": all_additions,
     "all_deletions": all_deletions,
   }
