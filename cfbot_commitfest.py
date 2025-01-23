@@ -75,44 +75,45 @@ def pull_modified_threads(conn):
                     (last_email_time, message_id, commitfest_id, submission_id))
     conn.commit()
 
-def make_branch_status_message(conn, branch_id):
+def make_branch_status_message(conn, branch_id=None, commit_id=None):
+  assert branch_id or commit_id
+
+  filter_column = "id" if branch_id else "commit_id"
+
   cursor = conn.cursor()
-  cursor.execute("""SELECT commit_id, submission_id, url, status, created, modified
+  cursor.execute(f"""SELECT id, commit_id, submission_id, url, status, created, modified,
+                            version, patch_count,
+                            first_additions, last_additions,
+                            all_additions, all_deletions
                       FROM branch
-                     WHERE id = %s""",
-                 (branch_id,))
-  commit_id, submission_id, url, status, created, modified = cursor.fetchone()
+                     WHERE {filter_column} = %s""",
+                 (branch_id or commit_id,))
+  (
+    branch_id, commit_id,
+    submission_id, url, status,
+    created, modified,
+    version, patch_count,
+    first_additions, last_additions,
+    all_additions, all_deletions,
+  )= cursor.fetchone()
   message = {
-          "submission_id": submission_id,
-          "branch_name": "cf/%d" % submission_id,
-          "branch_id": branch_id,
-          "commit_id": commit_id,
-          "apply_url": url,
-          "status": status,
-          "created": created.isoformat(),
-          "modified": modified.isoformat(),
+    "submission_id": submission_id,
+    "branch_name": "cf/%d" % submission_id,
+    "branch_id": branch_id,
+    "commit_id": commit_id,
+    "apply_url": url,
+    "status": status,
+    "created": created.isoformat(),
+    "modified": modified.isoformat(),
+    "version": version,
+    "patch_count": patch_count,
+    "first_additions": first_additions,
+    "last_additions": last_additions,
+    "all_additions": all_additions,
+    "all_deletions": all_deletions,
   }
   return message
 
-
-def make_branch_status_message_by_commit_id(conn, commit_id):
-  cursor = conn.cursor()
-  cursor.execute("""SELECT id, submission_id, url, status, created, modified
-                      FROM branch
-                     WHERE commit_id = %s""",
-                 (commit_id,))
-  branch_id, submission_id, url, status, created, modified = cursor.fetchone()
-  message = {
-          "submission_id": submission_id,
-          "branch_name": "cf/%d" % submission_id,
-          "branch_id": branch_id,
-          "commit_id": commit_id,
-          "apply_url": url,
-          "status": status,
-          "created": created.isoformat(),
-          "modified": modified.isoformat(),
-  }
-  return message
 
 def make_task_status_message(conn, task_id):
   cursor = conn.cursor()
@@ -134,7 +135,7 @@ def make_task_status_message(conn, task_id):
 
 def make_task_update_message(conn, task_id):
   task_status = make_task_status_message(conn, task_id)
-  branch_status = make_branch_status_message_by_commit_id(conn, task_status["commit_id"])
+  branch_status = make_branch_status_message(conn, commit_id=task_status["commit_id"])
   message = {
           "shared_secret": cfbot_config.COMMITFEST_SHARED_SECRET,
           "task_status": task_status,
@@ -143,7 +144,7 @@ def make_task_update_message(conn, task_id):
   return message
 
 def make_branch_update_message(conn, branch_id):
-  branch_status = make_branch_status_message(conn, branch_id)
+  branch_status = make_branch_status_message(conn, branch_id=branch_id)
   message = {
           "shared_secret": cfbot_config.COMMITFEST_SHARED_SECRET,
           "branch_status": branch_status,
@@ -151,7 +152,6 @@ def make_branch_update_message(conn, branch_id):
   return message
 
 def post_branch_status(conn, branch_id):
-  
   message = make_branch_update_message(conn, int(branch_id))
   if cfbot_config.COMMITFEST_POST_URL:
     cfbot_util.post(cfbot_config.COMMITFEST_POST_URL, message)
