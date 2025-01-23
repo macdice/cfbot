@@ -9,6 +9,8 @@ import math
 import os
 import re
 import scipy.stats
+import requests
+import logging
 
 # Patterns to look out for in artifact files.
 ARTIFACT_PATTERNS = ((re.compile(r'SUMMARY: .*Sanitizer.*'), "sanitizer"),
@@ -381,24 +383,28 @@ def process_one_job(conn, fetch_only):
       return True # done, go around again
 
     # dispatch to the right work handler
-    if type == "fetch-task-logs":
-      fetch_task_logs(conn, key)
-    elif type == "ingest-task-logs":
-      ingest_task_logs(conn, key)
-    elif type == "fetch-task-artifacts":
-      fetch_task_artifacts(conn, key)
-    elif type == "ingest-task-artifacts":
-      ingest_task_artifacts(conn, key)
-    elif type == "analyze-task-tests":
-      analyze_task_tests(conn, key)
-    elif type == "refresh-highlight-pages":
-      refresh_highlight_pages(conn, key)
-    elif type == "post-task-status":
-      cfbot_commitfest.post_task_status(conn, key)
-    elif type == "post-branch-status":
-      cfbot_commitfest.post_branch_status(conn, key)
-    else:
-      pass
+    try:
+      if type == "fetch-task-logs":
+        fetch_task_logs(conn, key)
+      elif type == "ingest-task-logs":
+        ingest_task_logs(conn, key)
+      elif type == "fetch-task-artifacts":
+        fetch_task_artifacts(conn, key)
+      elif type == "ingest-task-artifacts":
+        ingest_task_artifacts(conn, key)
+      elif type == "analyze-task-tests":
+        analyze_task_tests(conn, key)
+      elif type == "refresh-highlight-pages":
+        refresh_highlight_pages(conn, key)
+      elif type == "post-task-status":
+        cfbot_commitfest.post_task_status(conn, key)
+      elif type == "post-branch-status":
+        cfbot_commitfest.post_branch_status(conn, key)
+      else:
+        pass
+    except requests.exceptions.ReadTimeout:
+      logging.error("Failed to push task status to commitfest app due to a timeout")
+      return False
 
     # if we made it this far without an error, this work item is done
     cursor.execute("""delete from work_queue

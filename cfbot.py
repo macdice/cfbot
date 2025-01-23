@@ -12,6 +12,7 @@ import cfbot_web
 import errno
 import fcntl
 import logging
+import requests
 
 def try_lock():
   """Make sure that only one copy runs."""
@@ -29,7 +30,11 @@ def run():
   with cfbot_util.db() as conn:
 
     # get the current Commitfest ID
-    commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
+    try:
+      commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
+    except requests.exceptions.ReadTimeout:
+      logging.error("Failed to get current commitfest ID due to a timeout")
+      return
 
     # pull in any build results that we are waiting for
     # XXX would need to aggregate the 'keep_polling' flag if we went

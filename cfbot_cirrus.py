@@ -57,7 +57,7 @@ def get_builds_for_commit(owner, repo, sha):
     '''
     variables = dict(owner=owner, repo=repo, sha=sha)
     result = query_cirrus(query, variables)
-    if "searchBuilds" in result and len(result["searchBuilds"]):
+    if result and "searchBuilds" in result and len(result["searchBuilds"]):
         return result["searchBuilds"]
     else:
         return []
