@@ -255,7 +255,7 @@ def process_submission(conn, commitfest_id, submission_id):
     logging.info("skipping submission %s with no thread" % submission_id)
     return
   message_id, patch_urls = cfbot_commitfest_rpc.get_latest_patches_from_thread_url(thread_url)
-  version = None
+  version = ''
   for patch_url in patch_urls:
     parsed = urlparse(patch_url)
     filename = os.path.basename(parsed.path)
