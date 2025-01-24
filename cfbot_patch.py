@@ -191,7 +191,7 @@ Author(s): %s
     current_commit = get_commit_id(burner_repo_path)
     subprocess.check_call(f"""cd {burner_repo_path} && git reset master --hard -q && git merge -q --no-ff -F {tmp.name} {current_commit}""", shell=True)
 
-RE_ADDITIONS = re.compile(r"(\d+) additions")
+RE_ADDITIONS = re.compile(r"(\d+) insertions")
 RE_DELETIONS = re.compile(r"(\d+) deletions")
 
 def git_shortstat(path, commit):
