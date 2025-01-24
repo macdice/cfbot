@@ -191,10 +191,25 @@ Author(s): %s
     current_commit = get_commit_id(burner_repo_path)
     subprocess.check_call(f"""cd {burner_repo_path} && git reset master --hard -q && git merge -q --no-ff -F {tmp.name} {current_commit}""", shell=True)
 
+RE_ADDITIONS = re.compile(r"(\d+) additions")
+RE_DELETIONS = re.compile(r"(\d+) deletions")
+
 def git_shortstat(path, commit):
-    shortstat = capture(["git", "diff", "--shortstat", "master", commit], cwd=path)
-    elements = shortstat.split(" ")
-    return int(elements[4]), int(elements[6])
+  shortstat = capture(["git", "diff", "--shortstat", "master", commit], cwd=path)
+  additions = re.search(RE_ADDITIONS, shortstat)
+  deletions = re.search(RE_DELETIONS, shortstat)
+
+  if additions:
+    additions = int(additions.group(1))
+  else:
+    additions = 0
+
+  if deletions:
+    deletions = int(deletions.group(1))
+  else:
+    deletions = 0
+
+  return additions, deletions
 
 def patchburner_ctl(command, want_rcode=False):
   """Invoke the patchburner control script."""
