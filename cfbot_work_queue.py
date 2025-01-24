@@ -255,7 +255,7 @@ def ingest_task_logs(conn, task_id):
         insert_work_queue(cursor, "refresh-highlight-pages", "all")
         for t in highlight_types:
             insert_work_queue(cursor, "refresh-highlight-pages", t)
- 
+
 def fetch_task_logs(conn, task_id):
     cursor = conn.cursor()
 
@@ -403,7 +403,13 @@ def process_one_job(conn, fetch_only):
       else:
         pass
     except requests.exceptions.ReadTimeout:
-      logging.error("Failed to push task status to commitfest app due to a timeout")
+      logging.error("Failed to process work queue due to a timeout")
+      return False
+    except requests.exceptions.ConnectionError:
+      logging.error("Failed to process work queue due to a connection error")
+      return False
+    except requests.exceptions.HTTPError as e:
+      logging.error("Failed to process work queue due to an HTTP error: %s", e)
       return False
 
     # if we made it this far without an error, this work item is done

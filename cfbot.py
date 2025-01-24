@@ -35,6 +35,12 @@ def run():
     except requests.exceptions.ReadTimeout:
       logging.error("Failed to get current commitfest ID due to a timeout")
       return
+    except requests.exceptions.ConnectionError:
+      logging.error("Failed to get current commitfest ID due to a connection error")
+      return
+    except requests.exceptions.HTTPError as e:
+      logging.error("Failed to get current commitfest ID due to an HTTP error: %s", e)
+      return
 
     # pull in any build results that we are waiting for
     # XXX would need to aggregate the 'keep_polling' flag if we went
@@ -52,7 +58,17 @@ def run():
     cfbot_commitfest.pull_modified_threads(conn)
 
     # build one patch, if it is time for that
-    cfbot_patch.maybe_process_one(conn, commitfest_id)
+    try:
+      cfbot_patch.maybe_process_one(conn, commitfest_id)
+    except requests.exceptions.ReadTimeout:
+      logging.error("Failed to process cf entry due to a timeout")
+      return
+    except requests.exceptions.ConnectionError:
+      logging.error("Failed to process cf entry due to a connection error")
+      return
+    except requests.exceptions.HTTPError as e:
+      logging.error("Failed to process cf entry due to an HTTP error: %s", e)
+      return
 
     # rebuild a new set of web pages
     cfbot_web.rebuild(conn, commitfest_id)
