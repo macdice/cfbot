@@ -220,7 +220,7 @@ def update_submission(conn, message_id, commit_id, commitfest_id, submission_id)
                            last_branch_time = now()
                      WHERE commitfest_id = %s AND submission_id = %s""",
                  (message_id, message_id, commit_id, commitfest_id, submission_id))
-  
+
 def process_submission(conn, commitfest_id, submission_id):
   cursor = conn.cursor()
   template_repo_path = patchburner_ctl("template-repo-path").strip()
@@ -344,7 +344,7 @@ def maybe_process_one(conn, min_commitfest_id):
       process_submission(conn, commitfest_id, submission_id)
   else:
     logging.info("rate limiting in effect, see CONCURRENT_BUILDS in cfbot_config.py")
- 
+
 if __name__ == "__main__":
   with cfbot_util.db() as conn:
     #maybe_process_one(conn)
