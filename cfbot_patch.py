@@ -309,8 +309,14 @@ def process_submission(conn, commitfest_id, submission_id):
 
     # we committed the patches; now add a final merge commit with some metadata
     add_merge_commit(conn, burner_repo_path, commitfest_id, submission_id, message_id, version)
-    first_additions, first_deletions = git_shortstat(burner_repo_path, first_commit)
-    all_additions, all_deletions = git_shortstat(burner_repo_path, "HEAD")
+
+    if commit_count > 0:
+      first_additions, first_deletions = git_shortstat(burner_repo_path, first_commit)
+      all_additions, all_deletions = git_shortstat(burner_repo_path, "HEAD")
+    else:
+      first_additions, first_deletions = 0, 0
+      all_additions, all_deletions = 0, 0
+
     # push it to the remote monitored repo, if configured
     if cfbot_config.GIT_REMOTE_NAME:
       logging.info("pushing branch %s" % branch)
