@@ -5,7 +5,7 @@ ARG GROUP_ID=''
 ARG USER_ID=''
 
 RUN apt-get update \
-	&& apt-get install -y git \
+	&& apt-get install -y git unzip \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN if [ -n "$GROUP_ID" ]; then getent group $GROUP_ID || groupadd -g $GROUP_ID patchburner; fi
