@@ -87,7 +87,7 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
     candidates.sort()
     result = "https://www.postgresql.org/message-id/flat/" + candidates[-1][1]
   return result
-  
+
 def get_submissions_for_commitfest(commitfest_id):
   """Given a Commitfest ID, return a list of Submission objects."""
   result = []
