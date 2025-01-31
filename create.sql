@@ -48,12 +48,12 @@ CREATE TABLE public.branch (
     url text,
     created timestamp with time zone NOT NULL,
     modified timestamp with time zone NOT NULL,
-    version text DEFAULT ''::text NOT NULL,
-    patch_count integer DEFAULT 0 NOT NULL,
-    first_additions integer DEFAULT 0 NOT NULL,
-    first_deletions integer DEFAULT 0 NOT NULL,
-    all_additions integer DEFAULT 0 NOT NULL,
-    all_deletions integer DEFAULT 0 NOT NULL
+    version text,
+    patch_count integer,
+    first_additions integer,
+    first_deletions integer,
+    all_additions integer,
+    all_deletions integer
 );
 
 
