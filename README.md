@@ -57,3 +57,20 @@ On FreeBSD
 ```bash
 ./cfbot_patch.py 48 4496
 ```
+
+## Code formatting and linting
+
+```bash
+# Format code
+make format
+# lint code
+make lint
+# Automatically fix linting errors
+make lint-fix
+# Automatically fix linting errors including unsafe fixes
+# Unsafe fixes are those that may change the behavior of the code, but usually
+# you want that behavior
+make lint-fix-unsafe
+# Run both "make format" and "make lint-fix-unsafe" (usually what you want)
+make fix
+```
