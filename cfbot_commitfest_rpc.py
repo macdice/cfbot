@@ -100,7 +100,7 @@ def get_submissions_for_commitfest(commitfest_id):
   latest_email = None
   authors = ""
   for line in cfbot_util.slow_fetch(url).splitlines():
-    groups = re.search('<a href="([0-9]+)/">([^<]+)</a>', line)
+    groups = re.search('<a href="/patch/([0-9]+)/">([^<]+)</a>', line)
     if groups:
       submission_id = groups.group(1)
       name = html.unescape(groups.group(2))
