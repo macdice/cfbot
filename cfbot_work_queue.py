@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 
 import cfbot_commitfest
-import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
 import cfbot_web_highlights
-import math
-import os
 import re
 import scipy.stats
 import requests
@@ -341,7 +338,7 @@ def fetch_task_logs(conn, task_id):
             "https://api.cirrus-ci.com/v1/task/%s/logs/%s.log" % (task_id, command),
             True,
         )
-        if log_bin == None:
+        if log_bin is None:
             continue
         log = binary_to_safe_utf8(log_bin)
         cursor.execute(

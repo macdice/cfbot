@@ -4,21 +4,10 @@
 # For now these use webscraping, but they could become real API calls.
 
 import cfbot_util
-import datetime
-import errno
 import html
 
 # from html.parser import HTMLParser
-import os
 import re
-import requests
-import subprocess
-import shutil
-import sys
-import tarfile
-import time
-import unicodedata
-from urllib.parse import urlparse
 
 
 class Submission:
@@ -66,7 +55,7 @@ def get_latest_patches_from_thread_url(thread_url):
     # if there is a tarball attachment, there must be only one attachment,
     # otherwise give up on this thread (we don't know how to combine patches and
     # tarballs)
-    if selected_message_attachments != None:
+    if selected_message_attachments is not None:
         if any(
             x.endswith(".tgz") or x.endswith(".tar.gz") or x.endswith(".tar.bz2")
             for x in selected_message_attachments
@@ -177,9 +166,9 @@ def get_current_commitfest_id():
         )
         if groups:
             commitfest_id = groups.group(1)
-            state = groups.group(2)
+            groups.group(2)
             result = int(commitfest_id)
-    if result == None:
+    if result is None:
         raise Exception("Could not determine the current Commitfest ID")
     return result
 

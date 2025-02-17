@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
 import math
@@ -299,7 +298,7 @@ def build_page(
     expected_runtimes = load_expected_runtimes(conn)
     last_status = None
     commitfest_id_for_link = commitfest_id
-    if commitfest_id_for_link == None:
+    if commitfest_id_for_link is None:
         commitfest_id_for_link = ""
     with open(path + ".tmp", "w") as f:
         f.write(
@@ -361,16 +360,18 @@ def build_page(
         )
         for submission in submissions:
             # skip if we need to filter by commitfest
-            if commitfest_id != None and submission.commitfest_id != commitfest_id:
+            if commitfest_id is not None and submission.commitfest_id != commitfest_id:
                 continue
 
             # skip if we need to filter by author
-            if filter_author != None and filter_author not in all_authors(submission):
+            if filter_author is not None and filter_author not in all_authors(
+                submission
+            ):
                 continue
 
             # create a new heading row if this is a new CF status
             status = submission.status
-            if last_status == None or last_status != status:
+            if last_status is None or last_status != status:
                 f.write(
                     """      <tr><td colspan="5"><h2>%s</h2></td></tr>\n"""
                     % html_escape(status)

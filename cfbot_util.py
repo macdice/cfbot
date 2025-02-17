@@ -9,7 +9,7 @@ global_http_session = None
 def get_http_session():
     """A session allowing for HTTP connection reuse."""
     global global_http_session
-    if global_http_session == None:
+    if global_http_session is None:
         global_http_session = requests.Session()
     return global_http_session
 

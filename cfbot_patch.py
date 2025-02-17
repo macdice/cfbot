@@ -20,7 +20,6 @@ import os
 import re
 import requests
 import shlex
-import shutil
 import subprocess
 import tempfile
 import time

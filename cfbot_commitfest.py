@@ -86,7 +86,7 @@ def pull_modified_threads(conn):
         url = cfbot_commitfest_rpc.get_thread_url_for_submission(
             commitfest_id, submission_id
         )
-        if url == None:
+        if url is None:
             message_id = None
         else:
             message_id, attachments = (

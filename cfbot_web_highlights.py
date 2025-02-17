@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 
-import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
 import cfbot_web
 import html
-import math
 import os
-import re
-import unicodedata
 
 MODES = (
     "all",

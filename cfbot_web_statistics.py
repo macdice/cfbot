@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
 
-import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
-import math
 import os
-import re
-import unicodedata
-
-from cfbot_commitfest_rpc import Submission
 
 
 def header(f):
@@ -98,7 +92,7 @@ select task_name, date,
             task = ""
         else:
             last_task = task
-        if stddev == None:
+        if stddev is None:
             stddev = 0
         f.write(
             """

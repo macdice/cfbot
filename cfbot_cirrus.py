@@ -3,7 +3,6 @@ import cfbot_config
 import cfbot_util
 
 import requests
-import sys
 
 
 def query_cirrus(query, variables):
@@ -91,7 +90,6 @@ def get_tasks_for_build(build_id):
 
 
 def get_task_results(commit):
-    result = {}
     builds = get_builds_for_commit(
         cfbot_config.CIRRUS_USER, cfbot_config.CIRRUS_REPO, commit
     )
@@ -102,8 +100,6 @@ def get_task_results(commit):
 
 
 def pull_build_results(conn):
-    builds = None
-    task_results_for_commit = {}
     cursor = conn.cursor()
     cursor.execute("""SELECT commitfest_id,
                            submission_id,
@@ -114,7 +110,6 @@ def pull_build_results(conn):
         keep_polling_branch = False
         tasks = get_task_results(commit_id)
         if len(tasks) == 0:
-            keep_polling = True
             continue
         position = 0
         for task in get_task_results(commit_id):
@@ -155,9 +150,7 @@ def pull_build_results(conn):
                     # artifacts (without bodies) and task commands (steps)
                     if not task_still_running:
                         # fetch the list of artifacts immediately
-                        have_artifacts = False
                         for name, path, size in get_artifacts_for_task(task_id):
-                            have_artifacts = True
                             cursor.execute(
                                 """INSERT INTO artifact (task_id, name, path, size)
                                   VALUES (%s, %s, %s, %s)
