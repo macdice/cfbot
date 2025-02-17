@@ -10,6 +10,7 @@ import unicodedata
 
 from cfbot_commitfest_rpc import Submission
 
+
 def header(f):
     f.write("""<html>
   <head>
@@ -49,6 +50,7 @@ def header(f):
       <a href="highlights/all.html">Highlights</a>
     </p>
 """)
+
 
 def per_day(f, conn):
     f.write("""
@@ -92,13 +94,14 @@ select task_name, date,
 """)
     last_task = None
     for task, date, s, avg, stddev, count in cursor.fetchall():
-      if task == last_task:
-        task = ""
-      else:
-        last_task = task
-      if stddev == None:
-        stddev = 0
-      f.write("""
+        if task == last_task:
+            task = ""
+        else:
+            last_task = task
+        if stddev == None:
+            stddev = 0
+        f.write(
+            """
       <tr>
         <td>%s</td>
         <td>%s</td>
@@ -107,13 +110,14 @@ select task_name, date,
         <td align="right">%.2f</td>
         <td align="right">%d</td>
       </tr>
-""" %
-      (task, date, s, avg, stddev, count))
+"""
+            % (task, date, s, avg, stddev, count)
+        )
     f.write("""
     </table>
     """)
 
- 
+
 def per_task(f, conn):
     f.write("""
     <h2>Per task</h2>
@@ -155,17 +159,24 @@ select t.task_name,
 """)
     last_task = ""
     for task, command, c7, a7, d7, c30, a30, d30, c90, a90, d90 in cursor.fetchall():
-      if task == last_task:
-        task = ""
-      else:
-        last_task = task
-      if not a7: a7 = 0
-      if not d7: d7 = 0
-      if not a30: a30 = 0
-      if not d30: d30 = 0
-      if not a90: a90 = 0
-      if not d90: d90 = 0
-      f.write("""
+        if task == last_task:
+            task = ""
+        else:
+            last_task = task
+        if not a7:
+            a7 = 0
+        if not d7:
+            d7 = 0
+        if not a30:
+            a30 = 0
+        if not d30:
+            d30 = 0
+        if not a90:
+            a90 = 0
+        if not d90:
+            d90 = 0
+        f.write(
+            """
       <tr>
         <td>%s</td>
         <td>%s</td>
@@ -173,11 +184,13 @@ select t.task_name,
         <td align="right">%.2f, %.2f, %.2f</td>
         <td align="right">%d, %d, %d</td>
       </tr>
-""" %
-      (task, command, a7, a30, a90, d7, d30, d90, c7, c30, c90))
+"""
+            % (task, command, a7, a30, a90, d7, d30, d90, c7, c30, c90)
+        )
     f.write("""
     </table>
     """)
+
 
 def per_test(f, conn):
     cursor = conn.cursor()
@@ -221,24 +234,45 @@ select task.task_name,
 """)
     last_task = ""
     last_suite = ""
-    for task, command, suite, test, c7, a7, d7, c30, a30, d30, c90, a90, d90 in cursor.fetchall():
-      if command.endswith('32'):
-          task += "/32" # rather than wasting a whole column on "command"
-      if task == last_task:
-        task = ""
-      else:
-        last_task = task
-      if suite == last_suite:
-        suite = ""
-      else:
-        last_suite = suite
-      if not a7: a7 = 0
-      if not d7: d7 = 0
-      if not a30: a30 = 0
-      if not d30: d30 = 0
-      if not a90: a90 = 0
-      if not d90: d90 = 0
-      f.write("""
+    for (
+        task,
+        command,
+        suite,
+        test,
+        c7,
+        a7,
+        d7,
+        c30,
+        a30,
+        d30,
+        c90,
+        a90,
+        d90,
+    ) in cursor.fetchall():
+        if command.endswith("32"):
+            task += "/32"  # rather than wasting a whole column on "command"
+        if task == last_task:
+            task = ""
+        else:
+            last_task = task
+        if suite == last_suite:
+            suite = ""
+        else:
+            last_suite = suite
+        if not a7:
+            a7 = 0
+        if not d7:
+            d7 = 0
+        if not a30:
+            a30 = 0
+        if not d30:
+            d30 = 0
+        if not a90:
+            a90 = 0
+        if not d90:
+            d90 = 0
+        f.write(
+            """
       <tr>
         <td>%s</td>
         <td>%s</td>
@@ -247,12 +281,14 @@ select task.task_name,
         <td align="right">%.2f, %.2f, %.2f</td>
         <td align="right">%d, %d, %d</td>
       </tr>
-""" %
-      (task, suite, test, a7, a30, a90, d7, d30, d90, c7, c30, c90))
+"""
+            % (task, suite, test, a7, a30, a90, d7, d30, d90, c7, c30, c90)
+        )
 
     f.write("""
     </table>
     """)
+
 
 def footer(f):
     f.write("""
@@ -260,15 +296,17 @@ def footer(f):
 </html>
 """)
 
+
 def build_page(conn, path):
-  with open(path + ".tmp", "w") as f:
-    header(f)
-    per_day(f, conn)
-    per_task(f, conn)
-    per_test(f, conn)
-    footer(f)
-  os.rename(path + ".tmp", path)
+    with open(path + ".tmp", "w") as f:
+        header(f)
+        per_day(f, conn)
+        per_task(f, conn)
+        per_test(f, conn)
+        footer(f)
+    os.rename(path + ".tmp", path)
+
 
 if __name__ == "__main__":
-  with cfbot_util.db() as conn:
-    build_page(conn, os.path.join(cfbot_config.WEB_ROOT, "statistics.html"))
+    with cfbot_util.db() as conn:
+        build_page(conn, os.path.join(cfbot_config.WEB_ROOT, "statistics.html"))

@@ -10,18 +10,30 @@ import os
 import re
 import unicodedata
 
-MODES = ("all", "assertion", "compiler", "core", "linker", "panic", "regress", "sanitizer", "tap", "test")
+MODES = (
+    "all",
+    "assertion",
+    "compiler",
+    "core",
+    "linker",
+    "panic",
+    "regress",
+    "sanitizer",
+    "tap",
+    "test",
+)
 WHEN = ("current", "7", "30", "90")
 
+
 def build_page(conn, base_path, mode, when):
-  if when == "current":
-      suffix = ""
-  else:
-      suffix = "-" + when
-  path = base_path + "/" + mode + suffix + ".html"
-  path_tmp = path + ".tmp" + str(os.getpid())
-  with open(path_tmp, "w") as f:
-    f.write("""<html>
+    if when == "current":
+        suffix = ""
+    else:
+        suffix = "-" + when
+    path = base_path + "/" + mode + suffix + ".html"
+    path_tmp = path + ".tmp" + str(os.getpid())
+    with open(path_tmp, "w") as f:
+        f.write("""<html>
   <head>
     <meta charset="UTF-8"/>
     <title>PostgreSQL Patch Tester</title>
@@ -59,26 +71,31 @@ def build_page(conn, base_path, mode, when):
       <b>Highlights</b>
     </p>
     <p>Highlight type: """)
-    for t in MODES:
-        if t == mode:
-            f.write("<b>%s</b> " % (t,))
-        else:
-            f.write("""<a href="/highlights/%s%s.html">%s</a> \n""" % (t, suffix, t))
-    f.write("""
+        for t in MODES:
+            if t == mode:
+                f.write("<b>%s</b> " % (t,))
+            else:
+                f.write(
+                    """<a href="/highlights/%s%s.html">%s</a> \n""" % (t, suffix, t)
+                )
+        f.write("""
     </p>
     <p>Time range: """)
-    for t in WHEN:
-        if t == "current":
-            suffix = ""
-            display = "current"
-        else:
-            suffix = "-" + t
-            display = "%s-day" % (t,)
-        if t == when:
-            f.write("<b>%s</b> " % (display,))
-        else:
-            f.write("""<a href="/highlights/%s%s.html">%s</a> \n""" % (mode, suffix, display))
-    f.write("""
+        for t in WHEN:
+            if t == "current":
+                suffix = ""
+                display = "current"
+            else:
+                suffix = "-" + t
+                display = "%s-day" % (t,)
+            if t == when:
+                f.write("<b>%s</b> " % (display,))
+            else:
+                f.write(
+                    """<a href="/highlights/%s%s.html">%s</a> \n"""
+                    % (mode, suffix, display)
+                )
+        f.write("""
     </p>
 
     <p>
@@ -91,30 +108,30 @@ def build_page(conn, base_path, mode, when):
     </p>
     <table>
 """)
-    if mode != "all":
-        extra = "and h.type = '%s'" % (mode,)
-    else:
-        extra = ""
-    if when != "current":
-        days = when
-    else:
-        days = None
+        if mode != "all":
+            extra = "and h.type = '%s'" % (mode,)
+        else:
+            extra = ""
+        if when != "current":
+            days = when
+        else:
+            days = None
 
-    cursor = conn.cursor()
+        cursor = conn.cursor()
 
-    if when == "current":
+        if when == "current":
+            # The latest_submission CTE is due to a schema problem that needs to be
+            # fixed: we have a separate row for each submission in each commitfest.  We
+            # really only care about one.  Need to start treating subsmissions as a single
+            # entity that can change commitfest.
 
-	# The latest_submission CTE is due to a schema problem that needs to be
-	# fixed: we have a separate row for each submission in each commitfest.  We
-	# really only care about one.  Need to start treating subsmissions as a single
-	# entity that can change commitfest.
+            # The latest_branch CTE is also a bit silly; what is missing is a 'build' table.
+            # A single 'branch' that we push can in fact be re-built on Cirrus, which creates
+            # a new 'build', so the model is currently wrong.  Using commit_id to link tasks
+            # to branches is inefficient and incorrect, ... but mostly works.
 
-	# The latest_branch CTE is also a bit silly; what is missing is a 'build' table.
-        # A single 'branch' that we push can in fact be re-built on Cirrus, which creates
-        # a new 'build', so the model is currently wrong.  Using commit_id to link tasks
-        # to branches is inefficient and incorrect, ... but mostly works.
-
-        cursor.execute("""
+            cursor.execute(
+                """
 with latest_submission as (select distinct on (submission_id)
                                   commitfest_id,
                                   submission_id,
@@ -144,10 +161,13 @@ select s.name,
   join highlight h on h.task_id = t.task_id
  where s.status in ('Ready for Committer', 'Needs review', 'Waiting on Author')
        %s
- order by t.created desc, t.task_name, h.type, h.source""" % (extra,))
+ order by t.created desc, t.task_name, h.type, h.source"""
+                % (extra,)
+            )
 
-    else:
-        cursor.execute("""
+        else:
+            cursor.execute(
+                """
 with latest_submission as (select distinct on (submission_id)
                                   commitfest_id,
                                   submission_id,
@@ -170,70 +190,105 @@ select s.name,
  where created > now() - interval '%s days'
        %s
  order by t.created desc, t.task_name, h.type, h.source
-""" % (days, extra))
+"""
+                % (days, extra)
+            )
 
-    last_submission_id = 0
-    last_task_id = ""
-    for name, commitfest_id, submission_id, task_id, task_name, created, status, type, source, excerpt in cursor.fetchall():
-        if last_submission_id != submission_id:
-            f.write("""
+        last_submission_id = 0
+        last_task_id = ""
+        for (
+            name,
+            commitfest_id,
+            submission_id,
+            task_id,
+            task_name,
+            created,
+            status,
+            type,
+            source,
+            excerpt,
+        ) in cursor.fetchall():
+            if last_submission_id != submission_id:
+                f.write(
+                    """
             <tr>
               <td width="10%%" id="%s">%d/%d</td>
               <td width="90%%">%s</td>
-            </tr>""" %
-            (submission_id, commitfest_id, submission_id, html.escape(name),))
-        last_submission_id = submission_id
-        if last_task_id != task_id:
-            if status == "COMPLETED":
-                icon = cfbot_web.svg_img("new_success")
-            else:
-                icon = cfbot_web.svg_img("new_failure")
-            f.write("""
+            </tr>"""
+                    % (
+                        submission_id,
+                        commitfest_id,
+                        submission_id,
+                        html.escape(name),
+                    )
+                )
+            last_submission_id = submission_id
+            if last_task_id != task_id:
+                if status == "COMPLETED":
+                    icon = cfbot_web.svg_img("new_success")
+                else:
+                    icon = cfbot_web.svg_img("new_failure")
+                f.write(
+                    """
             <tr>
               <td width="10%%" align="right"><a href="https://cirrus-ci.com/task/%s">%s</a></td>
               <td width="90%%"><a href="https://cirrus-ci.com/task/%s">%s</td></td>
-            </tr>""" %
-                    (task_id, icon, task_id, html.escape(task_name)))
-        last_task_id = task_id
+            </tr>"""
+                    % (task_id, icon, task_id, html.escape(task_name))
+                )
+            last_task_id = task_id
 
-        if source.startswith("artifact:"):
-            url = "https://api.cirrus-ci.com/v1/artifact/task/%s/%s" % (task_id, source[9:])
-        elif source.startswith("command:"):
-            url = "https://api.cirrus-ci.com/v1/task/%s/logs/%s.log" % (task_id, source[8:])
-        else:
-            url = "https://google.com"
+            if source.startswith("artifact:"):
+                url = "https://api.cirrus-ci.com/v1/artifact/task/%s/%s" % (
+                    task_id,
+                    source[9:],
+                )
+            elif source.startswith("command:"):
+                url = "https://api.cirrus-ci.com/v1/task/%s/logs/%s.log" % (
+                    task_id,
+                    source[8:],
+                )
+            else:
+                url = "https://google.com"
 
-        def trunc(line):
-            if len(line) > 120:
-                return line[:120] + "..."
-            return line
+            def trunc(line):
+                if len(line) > 120:
+                    return line[:120] + "..."
+                return line
 
-        narrow_excerpt = "\n".join([trunc(line) for line in excerpt.splitlines()])
+            narrow_excerpt = "\n".join([trunc(line) for line in excerpt.splitlines()])
 
-        f.write("""
+            f.write(
+                """
           <tr>
             <td width="10%%"><a href="%s">%s</a></td>
             <td width="90%%"><pre style="font-size: 9px">%s</pre></td>
           </tr>
-    """ %
-                (url, html.escape(type), html.escape(narrow_excerpt)))
+    """
+                % (url, html.escape(type), html.escape(narrow_excerpt))
+            )
 
-    f.write("""
+        f.write("""
     </table>
   </body>
 </html>
 """)
-  os.rename(path_tmp, path)
+    os.rename(path_tmp, path)
+
 
 def rebuild_type(conn, type):
-  for when in WHEN:
-    build_page(conn, os.path.join(cfbot_config.WEB_ROOT, "highlights"), type, when)
+    for when in WHEN:
+        build_page(conn, os.path.join(cfbot_config.WEB_ROOT, "highlights"), type, when)
+
 
 def rebuild_all(conn):
-  for mode in MODES:
-    for when in WHEN:
-      build_page(conn, os.path.join(cfbot_config.WEB_ROOT, "highlights"), mode, when)
+    for mode in MODES:
+        for when in WHEN:
+            build_page(
+                conn, os.path.join(cfbot_config.WEB_ROOT, "highlights"), mode, when
+            )
+
 
 if __name__ == "__main__":
-  with cfbot_util.db() as conn:
-    rebuild_all(conn)
+    with cfbot_util.db() as conn:
+        rebuild_all(conn)
