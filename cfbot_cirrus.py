@@ -210,7 +210,7 @@ def pull_build_results(conn):
             # doubling.
             cursor.execute(
                 """UPDATE submission
-                      SET backoff_until = now() + (now() - last_email_time)
+                      SET backoff_until = now() + GREATEST(interval '1 day', (now() - last_email_time))
                     WHERE commitfest_id = %s
                       AND submission_id = %s""",
                 (commitfest_id, submission_id),
