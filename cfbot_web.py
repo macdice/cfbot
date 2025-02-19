@@ -343,8 +343,13 @@ def build_page(
       Here lives an experimental bot that converts email threads that are registered in the
       <a href="https://commitfest.postgresql.org/%s">Commitfest system</a> into
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">branches on Github</a>,
-      and collates test results from
-      <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>.  Key: %s or %s = new/recently changed, %s or %s = stable, %s needs rebase but previous build was successful, %s = working.
+      collates test results from
+      <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>, and posts the results to the Commitfest system.  Key: %s or %s = new/recently changed, %s or %s = stable, %s needs rebase but previous build was successful, %s = working.
+    </p>
+    <p>
+      Newsflash: This page is no longer the pimary place to see Commitfest CI
+      results.
+      Check the Commitfest system itself, which now shows the same information.
     </p>
     <table>
 """
