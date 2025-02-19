@@ -347,9 +347,9 @@ def build_page(
       <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>, and posts the results to the Commitfest system.  Key: %s or %s = new/recently changed, %s or %s = stable, %s needs rebase but previous build was successful, %s = working.
     </p>
     <p>
-      Newsflash: This page is no longer the pimary place to see Commitfest CI
+      Newsflash: This page is no longer the best place to see Commitfest CI
       results.
-      Check the Commitfest system itself, which now shows the same information.
+      Check the Commitfest system itself.
     </p>
     <table>
 """
