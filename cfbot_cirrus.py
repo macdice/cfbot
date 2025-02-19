@@ -108,6 +108,7 @@ def pull_build_results(conn):
                      WHERE status = 'testing'""")
     for commitfest_id, submission_id, commit_id in cursor.fetchall():
         keep_polling_branch = False
+        submission_needs_backoff = False
         tasks = get_task_results(commit_id)
         if len(tasks) == 0:
             continue
@@ -123,6 +124,8 @@ def pull_build_results(conn):
             if status not in ("FAILED", "ABORTED", "ERRORED", "COMPLETED"):
                 keep_polling_branch = True
                 task_still_running = True
+            if status in ("FAILED", "ABORTED", "ERRORED"):
+                submission_needs_backoff = True
             cursor.execute(
                 """SELECT status
                             FROM task
@@ -199,6 +202,18 @@ def pull_build_results(conn):
                              AND submission_id = %s
                              AND commit_id = %s""",
                 (commitfest_id, submission_id, commit_id),
+            )
+        if submission_needs_backoff:
+            # Take the time since the last email on the thread (really should
+            # be patch email, but we don't have that), and wait that long again
+            # before allowing this failing test to run again.  This will keep
+            # doubling.
+            cursor.execute(
+                """UPDATE submission
+                      SET backoff_until = now() + (now() - last_email_time)
+                    WHERE commitfest_id = %s
+                      AND submission_id = %s""",
+                (commitfest_id, submission_id),
             )
     conn.commit()
 

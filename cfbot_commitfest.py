@@ -42,6 +42,9 @@ def pull_submissions(conn, commitfest_id):
         if cursor.fetchone():
             # no change required
             continue
+        # Sending an email to a thread will clear the backoff
+        # caused by earlier failures.  That's not quite what we want, we'd
+        # rather clear it only when a new patch version is posted!
         cursor.execute(
             """INSERT INTO submission (commitfest_id, submission_id,
                                               name, status, authors,
@@ -52,7 +55,8 @@ def pull_submissions(conn, commitfest_id):
                       SET name = EXCLUDED.name,
                           status = EXCLUDED.status,
                           authors = EXCLUDED.authors,
-                          last_email_time = EXCLUDED.last_email_time""",
+                          last_email_time = EXCLUDED.last_email_time,
+                          backoff_until = NULL""",
             (
                 commitfest_id,
                 submission.id,

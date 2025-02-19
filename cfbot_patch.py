@@ -113,6 +113,7 @@ def choose_submission_without_new_patch(conn, min_commitfest_id):
                       FROM submission
                      WHERE last_message_id IS NOT NULL
                        AND commitfest_id >= %s
+                       AND (backoff_until IS NULL OR now() >= backoff_until)
                        AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')""",
         (min_commitfest_id,),
     )
@@ -137,6 +138,7 @@ def choose_submission_without_new_patch(conn, min_commitfest_id):
                         FROM submission
                        WHERE last_message_id IS NOT NULL
                          AND commitfest_id >= %s
+                         AND (backoff_until IS NULL OR now() >= backoff_until)
                          AND status IN ('Ready for Committer', 'Needs review', 'Waiting on Author')
                          AND submission_id NOT IN (4431, 4365) -- Joe!
                     ORDER BY last_branch_time NULLS FIRST
