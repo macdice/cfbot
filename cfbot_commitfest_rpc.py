@@ -101,22 +101,28 @@ def get_submissions_for_commitfest(commitfest_id):
     # parser = HTMLParser()
     url = "https://commitfest.postgresql.org/%s/" % (commitfest_id,)
     next_line_has_version = False
-    next_line_has_authors = False
     next_line_has_latest_email = False
     state = None
     latest_email = None
     authors = ""
+    td_count = 0
     for line in cfbot_util.slow_fetch(url).splitlines():
+        # maybe it's easier to count rows and columns
+        if re.search("<tr>", line):
+            td_count = 0
+            continue
+        if re.search("<td>", line):
+            td_count += 1
+
         groups = re.search('<a href="/patch/([0-9]+)/">([^<]+)</a>', line)
         if groups:
             submission_id = groups.group(1)
             name = html.unescape(groups.group(2))
+            continue
         if next_line_has_version:
             next_line_has_version = False
-            next_line_has_authors = True
             continue
-        if next_line_has_authors:
-            next_line_has_authors = False
+        if td_count == 6:
             groups = re.search("<td>([^<]*)</td>", line)
             if groups:
                 authors = groups.group(1)
@@ -152,7 +158,6 @@ def get_submissions_for_commitfest(commitfest_id):
         if groups:
             next_line_has_latest_email = True
             continue
-        next_line_has_authors = False
         next_line_has_latest_email = False
     return result
 
@@ -174,7 +179,7 @@ def get_current_commitfest_id():
 
 
 if __name__ == "__main__":
-    # for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
-    #  print str(sub)
-    # print get_thread_url_for_submission(19, 1787)
-    print(get_latest_patches_from_thread_url(get_thread_url_for_submission(37, 2901)))
+    for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
+        print(str(sub))
+    #    print get_thread_url_for_submission(19, 1787)
+    # print(get_latest_patches_from_thread_url(get_thread_url_for_submission(37, 2901)))
