@@ -110,7 +110,8 @@ CREATE TABLE public.submission (
     last_message_id text,
     last_branch_message_id text,
     last_branch_commit_id text,
-    last_branch_time timestamp with time zone
+    last_branch_time timestamp with time zone,
+    backoff_until timestamp with time zone
 );
 
 
