@@ -247,8 +247,8 @@ Author(s): %s
         )
 
 
-RE_ADDITIONS = re.compile(r"(\d+) insertions")
-RE_DELETIONS = re.compile(r"(\d+) deletions")
+RE_ADDITIONS = re.compile(r"(\d+) insertion")
+RE_DELETIONS = re.compile(r"(\d+) deletion")
 
 
 def git_shortstat(path, commit):
