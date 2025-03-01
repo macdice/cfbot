@@ -3,7 +3,7 @@
 ## Setup database and config
 
 ```bash
-cp cfbot_config.py.example cfbot_config.py
+cp example_cfbot_config.py cfbot_config.py
 createdb cfbot
 createuser cfbot
 psql -v ON_ERROR_STOP=1 -f create.sql "dbname=cfbot"
