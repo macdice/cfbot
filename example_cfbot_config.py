@@ -16,6 +16,10 @@ CI_MODULES = ("cirrus",)
 # Some settings are different for our production server
 PRODUCTION = False
 
+# commitfest integration settiongs
+COMMITFEST_SHARED_SECRET = "INSECURE"
+COMMITFEST_POST_URL = "http://localhost:8007/cfbot_notify/"
+
 # http settings (be polite by identifying ourselves and limited rate)
 # SLOW_FETCH_SLEEP = 1.0
 # SLOW_FETCH_SLEEP = 0.1
