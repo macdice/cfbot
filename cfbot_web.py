@@ -347,9 +347,15 @@ def build_page(
       <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>, and posts the results to the Commitfest system.  Key: %s or %s = new/recently changed, %s or %s = stable, %s needs rebase but previous build was successful, %s = working.
     </p>
     <p>
-      Newsflash: This page is no longer the best place to see Commitfest CI
+      News: This page is no longer the best place to see Commitfest CI
       results.
-      Check the Commitfest system itself.
+      Please check the Commitfest system itself.
+    </p>
+    <p>
+      News: The two empty circles are placeholders for NetBSD and OpenBSD
+      CI tasks (these are supported OSes that your patch will encounter in
+      the build farm after commit).  See CF item #5360 where they are
+      enabled.  Getting closer to turning them on everywhere...
     </p>
     <table>
 """
@@ -481,10 +487,10 @@ def build_page(
                 """
       <tr>
         <td width="8%%">%s/%s</td>
-        <td width="42%%"><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
+        <td width="35%%"><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
         <td width="20%%">%s</td>
         <td width="5%%" align="right">%s</td>
-        <td width="25%%">%s</td>
+        <td width="38%%">%s</td>
 """
                 % (
                     submission.commitfest_id,
