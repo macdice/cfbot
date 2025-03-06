@@ -347,7 +347,7 @@ def process_submission(conn, commitfest_id, submission_id):
     for patch_url in patch_urls:
         parsed = urlparse(patch_url)
         filename = os.path.basename(parsed.path)
-        if not version and re.match(r"v\d+-", filename):
+        if not version and re.match(r"[vV]\d+-", filename):
             version = filename.split("-")[0]
         dest = os.path.join(patch_dir, filename)
         with open(dest, "wb+") as f:
