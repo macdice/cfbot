@@ -33,11 +33,12 @@ git config user.email "cfbot@cputube.org"
 git status
 
 for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort); do
-	echo "=== applying patch $f"
-
 	# This extracts the information from the patch, just like how "git am" would
 	# do it. But because not all patches are created with "git format-patch" this
 	# information, we need to do this manually and fallback to sensible defaults.
+	# Also, even for patches created with "git format-patch", sometimes we fail
+	# to apply it with "git am" and then fall back to patch(1) or "git apply".
+	# For both of those we still want to restore the original message.
 	git mailinfo ../msg ../patch <"/work/patches/$f" >../info
 	# Clean out /dev/null in case git mailinfo wrote something to it
 	: >/dev/null
@@ -51,7 +52,36 @@ for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort);
 
 }${MESSAGE}"
 
-	git apply --3way --allow-empty "/work/patches/$f" || { git diff && exit 1; }
-	git commit -m "$MESSAGE" --author="${NAME:-Commitfest Bot} <${EMAIL:-cfbot@cputube.org}>" --date="${DATE:-now}" --allow-empty
+	set +x
+	echo "=== using 'git am' to apply patch $f ==="
+	# git am usually does a decent job at applying a patch, as long as the
+	# patch was created with git format-patch. It also atuomatically creates a
+	# git commit, so we don't need to do that manually and can just continue
+	# with the next patch if it succeeds.
+	git am --3way "/work/patches/$f" && continue
+	# Okay it failed, let's clean up and try the next option.
+	git reset HEAD .
+	git checkout -- .
+	git clean -fdx
+	echo "=== using patch(1) to apply patch $f ==="
+	if ! patch -p1 --no-backup-if-mismatch -V none -f -N <"/work/patches/$f" && git add .; then
+		git reset HEAD .
+		git checkout -- .
+		git clean -fdx
+		# We use git apply as a last option, because it provides the best
+		# output for conflicts. It also works well for patches that were
+		# already applied.
+		echo "=== using 'git apply' to apply patch $f ==="
+		git apply --3way --allow-empty "/work/patches/$f" || { git diff && exit 1; }
+	fi
+
+	if git diff --cached; then
+		# No need to clutter the GitHub commit history  with commits that don't
+		# change anything, usually this happens if a subset of the patchset has
+		# already been applied.
+		echo "=== Patch was already applied, skipping commit ==="
+		continue
+	fi
+	git commit -m "$MESSAGE" --author="${NAME:-Commitfest Bot} <${EMAIL:-cfbot@cputube.org}>" --date="${DATE:-now}"
 
 done
