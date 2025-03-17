@@ -31,21 +31,7 @@ def try_lock():
 def run():
     with cfbot_util.db() as conn:
         # get the current Commitfest ID
-        try:
-            commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
-        except requests.exceptions.ReadTimeout:
-            logging.error("Failed to get current commitfest ID due to a timeout")
-            return
-        except requests.exceptions.ConnectionError:
-            logging.error(
-                "Failed to get current commitfest ID due to a connection error"
-            )
-            return
-        except requests.exceptions.HTTPError as e:
-            logging.error(
-                "Failed to get current commitfest ID due to an HTTP error: %s", e
-            )
-            return
+        commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
 
         # pull in any build results that we are waiting for
         # XXX would need to aggregate the 'keep_polling' flag if we went
@@ -63,17 +49,7 @@ def run():
         cfbot_commitfest.pull_modified_threads(conn)
 
         # build one patch, if it is time for that
-        try:
-            cfbot_patch.maybe_process_one(conn, commitfest_id)
-        except requests.exceptions.ReadTimeout:
-            logging.error("Failed to process cf entry due to a timeout")
-            return
-        except requests.exceptions.ConnectionError:
-            logging.error("Failed to process cf entry due to a connection error")
-            return
-        except requests.exceptions.HTTPError as e:
-            logging.error("Failed to process cf entry due to an HTTP error: %s", e)
-            return
+        cfbot_patch.maybe_process_one(conn, commitfest_id)
 
         # rebuild a new set of web pages
         cfbot_web.rebuild(conn, commitfest_id)
@@ -86,5 +62,12 @@ if __name__ == "__main__":
     # don't run if we're already running
     lock_fd = try_lock()
     if lock_fd:
-        run()
+        try:
+            run()
+        except requests.exceptions.ReadTimeout:
+            logging.error("Failed to process due to a timeout")
+        except requests.exceptions.ConnectionError:
+            logging.error("Failed to process due to a connection error")
+        except requests.exceptions.HTTPError as e:
+            logging.error("Failed to process due to an HTTP error: %s", e)
         lock_fd.close()
