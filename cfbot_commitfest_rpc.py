@@ -98,7 +98,6 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
 
 def get_submissions_for_commitfest(commitfest_id):
     """Given a Commitfest ID, return a list of Submission objects."""
-    print("BBB", commitfest_id)
     result = []
     # parser = HTMLParser()
     url = f"{cfbot_config.COMMITFEST_HOST}/{commitfest_id}/"
