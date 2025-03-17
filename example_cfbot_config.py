@@ -17,6 +17,7 @@ CI_MODULES = ("cirrus",)
 PRODUCTION = False
 
 # commitfest integration settiongs
+COMMITFEST_HOST = "https://commitfest.postgresql.org"
 COMMITFEST_SHARED_SECRET = "INSECURE"
 COMMITFEST_POST_URL = "http://localhost:8007/cfbot_notify/"
 

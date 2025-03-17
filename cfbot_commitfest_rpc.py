@@ -3,6 +3,7 @@
 # Routines that interface with the Commitfest app.
 # For now these use webscraping, but they could become real API calls.
 
+import cfbot_config
 import cfbot_util
 import html
 
@@ -74,7 +75,7 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
     thread' page in the mailing list archives."""
     # find all the threads and latest message times
     result = None
-    url = "https://commitfest.postgresql.org/%s/%s/" % (commitfest_id, submission_id)
+    url = f"{cfbot_config.COMMITFEST_HOST}/patch/{submission_id}/"
     candidates = []
     candidate = None
     for line in cfbot_util.slow_fetch(url).splitlines():
@@ -97,9 +98,10 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
 
 def get_submissions_for_commitfest(commitfest_id):
     """Given a Commitfest ID, return a list of Submission objects."""
+    print("BBB", commitfest_id)
     result = []
     # parser = HTMLParser()
-    url = "https://commitfest.postgresql.org/%s/" % (commitfest_id,)
+    url = f"{cfbot_config.COMMITFEST_HOST}/{commitfest_id}/"
     next_line_has_version = False
     next_line_has_latest_email = False
     state = None
@@ -154,18 +156,26 @@ def get_submissions_for_commitfest(commitfest_id):
             state = groups.group(1)
             next_line_has_version = True
             continue
-        groups = re.search('<td style="white-space: nowrap;">.*<br/>.*</td>', line)
+        groups = re.search('<td style="white-space: nowrap;" title="([^"]+)">', line)
         if groups:
-            next_line_has_latest_email = True
-            continue
-        next_line_has_latest_email = False
+            latest_email = groups.group(1)
+            result.append(
+                Submission(
+                    submission_id,
+                    commitfest_id,
+                    name,
+                    state,
+                    authors.split(", "),
+                    latest_email,
+                )
+            )
     return result
 
 
 def get_current_commitfest_id():
     """Find the ID of the current open or next future Commitfest."""
     result = None
-    for line in cfbot_util.slow_fetch("https://commitfest.postgresql.org").splitlines():
+    for line in cfbot_util.slow_fetch(cfbot_config.COMMITFEST_HOST).splitlines():
         groups = re.search(
             '<a href="/([0-9]+)/">[0-9]+-[0-9]+</a> \((Open|In Progress) ', line
         )
