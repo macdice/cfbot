@@ -101,18 +101,27 @@ def get_task_results(commit):
 
 def pull_build_results(conn):
     cursor = conn.cursor()
-    cursor.execute("""SELECT commitfest_id,
+    cursor.execute("""SELECT id,
+                           commitfest_id,
                            submission_id,
-                           commit_id
+                           commit_id,
+                           created < now() - interval '1 hour' AS timeout_reached
                       FROM branch
                      WHERE status = 'testing'""")
-    for commitfest_id, submission_id, commit_id in cursor.fetchall():
+    for (
+        branch_id,
+        commitfest_id,
+        submission_id,
+        commit_id,
+        timeout_reached,
+    ) in cursor.fetchall():
         keep_polling_branch = False
         submission_needs_backoff = False
         tasks = get_task_results(commit_id)
         if len(tasks) == 0:
             continue
         position = 0
+        posted_at_least_one_task_status = False
         for task in get_task_results(commit_id):
             task_still_running = False
             position += 1
@@ -128,11 +137,12 @@ def pull_build_results(conn):
                 submission_needs_backoff = True
             cursor.execute(
                 """SELECT status
-                            FROM task
-                           WHERE task_id = %s""",
+                     FROM task
+                    WHERE task_id = %s""",
                 (task_id,),
             )
             row = cursor.fetchone()
+            post_task_status = False
             if row:
                 # only update if status changes, so we can use the modified time
                 if row[0] != status:
@@ -143,12 +153,8 @@ def pull_build_results(conn):
                                WHERE task_id = %s""",
                         (status, task_id),
                     )
-                    # tell the commitfest app
-                    cursor.execute(
-                        """INSERT into work_queue (type, key, status)
-                              VALUES ('post-task-status', %s, 'NEW')""",
-                        (task_id,),
-                    )
+                    post_task_status = True
+
                     # if we reached a final state then it is time to pull down the
                     # artifacts (without bodies) and task commands (steps)
                     if not task_still_running:
@@ -192,17 +198,47 @@ def pull_build_results(conn):
                         status,
                     ),
                 )
+                # hmm we don't want to tell the cf app about CREATED but not triggered stuff...
+                # XXX can we find out the triggered status, and skip that way?
+                if status != "CREATED":
+                    post_task_status = True
 
-        if not keep_polling_branch:
+            if post_task_status:
+                # tell the commitfest app
+                cursor.execute(
+                    """INSERT into work_queue (type, key, status)
+                       VALUES ('post-task-status', %s, 'NEW')""",
+                    (task_id,),
+                )
+                posted_at_least_one_task_status = True
+
+        if timeout_reached:
+            new_branch_status = "timeout"
+        elif not keep_polling_branch:
+            new_branch_status = "finished"
+        else:
+            new_branch_status = None  # no change
+
+        if new_branch_status:
             cursor.execute(
                 """UPDATE branch
-                             SET status = 'finished',
-                                 modified = now()
-                           WHERE commitfest_id = %s
-                             AND submission_id = %s
-                             AND commit_id = %s""",
-                (commitfest_id, submission_id, commit_id),
+                      SET status = %s,
+                          modified = now()
+                    WHERE id = %s""",
+                (
+                    new_branch_status,
+                    branch_id,
+                ),
             )
+            if not posted_at_least_one_task_status:
+                # task status messages include the branch status so no point in
+                # posting another update unless we haven't queued one already
+                # in this transaction
+                cursor.execute(
+                    """INSERT INTO work_queue (type, key, status)
+                       VALUES ('post-branch-status', %s, 'NEW')""",
+                    (branch_id,),
+                )
         if submission_needs_backoff:
             # Take the time since the last email on the thread (really should
             # be patch email, but we don't have that), and wait that long again

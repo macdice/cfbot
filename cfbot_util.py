@@ -58,9 +58,11 @@ def gc(conn):
         """DELETE FROM task WHERE created < now() - interval '4 hours' AND status = 'EXECUTING'"""
     )  # ?
     cursor.execute("""DELETE FROM branch WHERE created < now() - interval '6 months'""")
-    cursor.execute(
-        """UPDATE branch SET status = 'timeout' WHERE created < now() - interval '2 hours' AND status = 'testing'"""
-    )
+
+    # timing out branches is now done in cfbot_cirrus.py pull_build_results()
+    # cursor.execute(
+    #    """UPDATE branch SET status = 'timeout' WHERE created < now() - interval '2 hours' AND status = 'testing'"""
+    # )
     # TODO: GC the git tree too!
     conn.commit()
 
