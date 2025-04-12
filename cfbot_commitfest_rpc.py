@@ -107,7 +107,10 @@ def get_submissions_for_commitfest(commitfest_id):
     latest_email = None
     authors = ""
     td_count = 0
-    for line in cfbot_util.slow_fetch(url).splitlines():
+    body = cfbot_util.slow_fetch(url, True)
+    if body == None:
+        return []
+    for line in body.splitlines():
         # maybe it's easier to count rows and columns
         if re.search("<tr>", line):
             td_count = 0
