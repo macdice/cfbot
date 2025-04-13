@@ -37,10 +37,8 @@ DSN = "cfbot"
 if platform.system() == "Linux":
     if shutil.which("podman"):
         PATCHBURNER_CTL = "./cfbot_patchburner_podman_ctl.sh"
-    elif shutil.which("docker"):
-        PATCHBURNER_CTL = "./cfbot_patchburner_docker_ctl.sh"
     else:
-        PATCHBURNER_CTL = "./cfbot_patchburner_chroot_ctl.sh"
+        PATCHBURNER_CTL = "./cfbot_patchburner_docker_ctl.sh"
 else:
     PATCHBURNER_CTL = "sudo /usr/local/sbin/cfbot_patchburner_ctl.sh"
 

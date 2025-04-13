@@ -12,7 +12,7 @@ usage() {
 	echo
 	echo "init-template -- create 'patchburner_template'"
 	echo
-	echo "create -- create a new chroot under 'patchburner'"
+	echo "create -- create a new docker image with the cfbot-patchburner tag"
 	echo "apply -- apply all the patches found in patchburner/work/patches'"
 	echo "destroy -- destroy 'patchburner' if it exists"
 	echo
