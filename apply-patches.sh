@@ -29,6 +29,15 @@ cd /work/postgresql
 git config user.name "Commitfest Bot"
 git config user.email "cfbot@cputube.org"
 
+if command -v gpatch >/dev/null 2>&1; then
+	# gpatch is a GNU patch that is compatible with BSD patch, but has some
+	# extra features. We use it if available. This is mostly for FreeBSD to
+	# behave like Linux.
+	PATCH_CMD=gpatch
+else
+	PATCH_CMD=patch
+fi
+
 # Somehow this is necessary to avoid "does not match index" when running "git apply"
 git status
 
@@ -64,7 +73,7 @@ for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort);
 	git checkout -- .
 	git clean -fdx
 	echo "=== using patch(1) to apply patch $f ==="
-	if ! patch -p1 --no-backup-if-mismatch -V none -f -N <"/work/patches/$f" && git add .; then
+	if ! $PATCH_CMD -p1 --no-backup-if-mismatch -V none -f -N <"/work/patches/$f" && git add .; then
 		git reset HEAD .
 		git checkout -- .
 		git clean -fdx
