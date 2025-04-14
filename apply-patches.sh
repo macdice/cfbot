@@ -73,7 +73,7 @@ for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort);
 	git checkout -- .
 	git clean -fdx
 	echo "=== using patch(1) to apply patch $f ==="
-	if ! $PATCH_CMD -p1 --no-backup-if-mismatch -V none -f -N <"/work/patches/$f" && git add .; then
+	if ! ($PATCH_CMD -p1 --no-backup-if-mismatch -V none -f -N <"/work/patches/$f" && git add .); then
 		git reset HEAD .
 		git checkout -- .
 		git clean -fdx
@@ -84,7 +84,7 @@ for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort);
 		git apply --3way --allow-empty "/work/patches/$f" || { git diff && exit 1; }
 	fi
 
-	if git diff --cached; then
+	if git diff --cached --quiet; then
 		# No need to clutter the GitHub commit history  with commits that don't
 		# change anything, usually this happens if a subset of the patchset has
 		# already been applied.
