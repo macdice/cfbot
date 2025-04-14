@@ -240,8 +240,7 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
     return results
 
 
-def rebuild(conn, commitfest_id):
-    submissions = load_submissions(conn, commitfest_id)
+def rebuild(conn, commitfest_id, commitfest_name, submissions):
     build_page(
         conn,
         "x",
@@ -249,17 +248,12 @@ def rebuild(conn, commitfest_id):
         submissions,
         None,
         None,
-        os.path.join(cfbot_config.WEB_ROOT, "index.html"),
+        os.path.join(cfbot_config.WEB_ROOT, commitfest_name, ".html"),
     )
-    build_page(
-        conn,
-        "x",
-        commitfest_id + 1,
-        submissions,
-        None,
-        None,
-        os.path.join(cfbot_config.WEB_ROOT, "next.html"),
-    )
+    return submissions
+
+
+def rebuild_authors(conn, submissions):
     for author in unique_authors(submissions):
         build_page(
             conn,
@@ -333,8 +327,9 @@ def build_page(
   <body>
     <h1>PostgreSQL Patch Tester</h1>
     <p>
-      <a href="index.html">Current commitfest</a> |
-      <a href="next.html">Next commitfest</a> |
+      <a href="inprogress.html">In Progress commitfest</a> |
+      <a href="open.html">Open commitfest</a> |
+      <a href="draft.html">Draft commitfest</a> |
       <a href="https://wiki.postgresql.org/wiki/Cfbot">FAQ</a> |
       <a href="statistics.html">Statistics</a> |
       <a href="highlights/all.html">Highlights</a>

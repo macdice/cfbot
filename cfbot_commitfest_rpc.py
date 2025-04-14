@@ -6,6 +6,7 @@
 import cfbot_config
 import cfbot_util
 import html
+import json
 
 # from html.parser import HTMLParser
 import re
@@ -188,6 +189,25 @@ def get_current_commitfest_id():
     if result is None:
         raise Exception("Could not determine the current Commitfest ID")
     return result
+
+
+def get_commitfest_workflow():
+    result = cfbot_util.slow_fetch(
+        cfbot_config.COMMITFEST_HOST + "/api/v1/commitfest/active"
+    )
+    jsonobj = json.loads(result)
+    workflow = jsonobj["workflow"]
+
+    if not workflow["open"]:
+        workflow["open"]["id"] = None
+
+    if not workflow["inprogress"]:
+        workflow["inprogress"]["id"] = None
+
+    if not workflow["parked"]:
+        workflow["parked"]["id"] = None
+
+    return workflow
 
 
 if __name__ == "__main__":
