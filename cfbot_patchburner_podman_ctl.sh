@@ -8,7 +8,7 @@ TEMPLATE_DIR=patchburner_template
 MOUNTED_DIR=patchburner_podman
 
 usage() {
-	echo "Usage: $1 init|create|apply|destroy"
+	echo "Usage: $1 init-template|create|apply|destroy"
 	echo
 	echo "init-template -- create 'patchburner_template'"
 	echo
