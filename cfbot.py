@@ -30,9 +30,6 @@ def try_lock():
 
 def run():
     with cfbot_util.db() as conn:
-        # get the current Commitfest ID
-        commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
-
         # pull in any build results that we are waiting for
         # XXX would need to aggregate the 'keep_polling' flag if we went
         # back to supporting multiple providers, or do something smarter,
@@ -41,10 +38,23 @@ def run():
         cfbot_cirrus.pull_build_results(conn)
 
         # exchange data with the Commitfest app
-        logging.info("pulling submissions for current commitfest")
-        cfbot_commitfest.pull_submissions(conn, commitfest_id)
-        logging.info("pulling submissions for next commitfest")
-        cfbot_commitfest.pull_submissions(conn, commitfest_id + 1)
+
+        workflow = cfbot_commitfest_rpc.get_commitfest_workflow()
+        for bucket in ["open", "inprogress", "parked"]:
+            if workflow[bucket]["id"]:
+                cfid = workflow[bucket]["id"]
+                logging.info(
+                    "pulling submissions for %s commitfest %d" % (bucket, cfid)
+                )
+                cfbot_commitfest.pull_submissions(conn, cfid)
+
+        if workflow["inprogress"]["id"]:
+            commitfest_id = workflow["inprogress"]["id"]
+        else:
+            # An open commitfest is supposed to exist at all times.
+            commitfest_id = workflow["open"]["id"]
+
+        # scrape thread data
         logging.info("pulling modified threads")
         cfbot_commitfest.pull_modified_threads(conn)
 
@@ -52,7 +62,12 @@ def run():
         cfbot_patch.maybe_process_one(conn, commitfest_id)
 
         # rebuild a new set of web pages
-        cfbot_web.rebuild(conn, commitfest_id)
+        submissions = cfbot_web.load_submissions(conn, commitfest_id)
+        for bucket in ["open", "inprogress", "parked"]:
+            if workflow[bucket]["id"]:
+                cfid = workflow[bucket]["id"]
+                cfbot_web.rebuild(conn, cfid, bucket, submissions)
+        cfbot_web.rebuild_authors(conn, submissions)
 
         # garbage collect old build results
         cfbot_util.gc(conn)
