@@ -35,7 +35,7 @@ CFBOT_USER=cfbot
 CFBOT_UID=1002
 
 usage() {
-	echo "Usage: $1 init|create|apply|destroy"
+	echo "Usage: $1 init-template|create|apply|destroy"
 	echo
 	echo "init-template -- create a new jail 'patchbase'"
 	echo
