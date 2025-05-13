@@ -278,13 +278,7 @@ def patchburner_ctl(command, want_rcode=False):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
-
-        output = p.stdout.read()
-        try:
-            output = output.decode("utf-8")
-        except UnicodeDecodeError:
-            pass
-
+        output = p.stdout.read().decode("utf-8", errors="replace")
         rcode = p.wait()
         return output, rcode
     else:
@@ -364,16 +358,12 @@ def process_submission(conn, commitfest_id, submission_id):
     output, rcode = patchburner_ctl("apply", want_rcode=True)
     # write the patch output to a public log file
     log_file = f"patch_{submission_id}.log"
-    with open(os.path.join(cfbot_config.WEB_ROOT, log_file), "wb+") as f:
+    with open(os.path.join(cfbot_config.WEB_ROOT, log_file), "w+") as f:
         f.write(
-            f"=== Applying patches on top of PostgreSQL commit ID {commit_id} ===\n".encode(
-                "utf-8"
-            )
+            "=== Applying patches on top of PostgreSQL commit ID %s ===\n"
+            % (commit_id,)
         )
-        if isinstance(output, bytes):
-            f.write(output)
-        else:
-            f.write(output.encode("utf-8"))
+        f.write(output)
     log_url = cfbot_config.CFBOT_APPLY_URL % log_file
     # did "patch" actually succeed?
     if rcode != 0:
