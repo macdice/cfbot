@@ -70,4 +70,7 @@ if __name__ == "__main__":
             logging.error("Failed to process due to a connection error")
         except requests.exceptions.HTTPError as e:
             logging.error("Failed to process due to an HTTP error: %s", e)
+        except Exception as e:
+            logging.error("Some unexpected error occured: %s", e)
+            raise
         lock_fd.close()
