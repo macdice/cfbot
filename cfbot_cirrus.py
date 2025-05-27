@@ -118,9 +118,11 @@ def pull_build_results(conn):
         keep_polling_branch = False
         submission_needs_backoff = False
         tasks = get_task_results(commit_id)
+        if len(tasks) == 0:
+            keep_polling_branch = True
         position = 0
         posted_at_least_one_task_status = False
-        for task in get_task_results(commit_id):
+        for task in tasks:
             task_still_running = False
             position += 1
             task_id = task["id"]
