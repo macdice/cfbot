@@ -241,25 +241,27 @@ def pull_build_results(conn):
                 )
 
         if submission_needs_backoff:
-            # Take the time since the last email on the thread (really should
-            # be patch email, but we don't have that), and wait that long again
-            # before allowing this failing test to run again.  This will keep
-            # doubling.
+            # If we're not already backing off due to a previous failure, then
+            # we should start backing off. We also double the backoff time.
             cursor.execute(
                 """UPDATE submission
                       SET backoff_until = now() + COALESCE(last_backoff * 2, interval '1 day'),
                           last_backoff = COALESCE(last_backoff * 2, interval '1 day')
                     WHERE commitfest_id = %s
-                      AND submission_id = %s""",
+                      AND submission_id = %s
+                      AND backoff_until < now()""",
                 (commitfest_id, submission_id),
             )
-        else:
+        elif new_branch_status == "finished":
+            # Reset last_backoff and backoff_until if we finished successfully
+            # without triggering a new backoff.
             cursor.execute(
                 """UPDATE submission
                       SET backoff_until = NULL,
                           last_backoff = NULL
                     WHERE commitfest_id = %s
-                      AND submission_id = %s""",
+                      AND submission_id = %s
+                      AND backoff_until < now()""",
                 (commitfest_id, submission_id),
             )
 
