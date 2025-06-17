@@ -249,7 +249,7 @@ def pull_build_results(conn):
                           last_backoff = COALESCE(last_backoff * 2, interval '1 day')
                     WHERE commitfest_id = %s
                       AND submission_id = %s
-                      AND backoff_until < now()""",
+                      AND (backoff_until < now() OR backoff_until IS NULL)""",
                 (commitfest_id, submission_id),
             )
         elif new_branch_status == "finished":
