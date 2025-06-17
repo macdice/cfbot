@@ -56,7 +56,8 @@ def pull_submissions(conn, commitfest_id):
                           status = EXCLUDED.status,
                           authors = EXCLUDED.authors,
                           last_email_time = EXCLUDED.last_email_time,
-                          backoff_until = NULL""",
+                          backoff_until = NULL,
+                          last_backoff = NULL""",
             (
                 commitfest_id,
                 submission.id,
