@@ -239,6 +239,7 @@ def pull_build_results(conn):
                        VALUES ('post-branch-status', %s, 'NEW')""",
                     (branch_id,),
                 )
+
         if submission_needs_backoff:
             # Take the time since the last email on the thread (really should
             # be patch email, but we don't have that), and wait that long again
@@ -246,11 +247,22 @@ def pull_build_results(conn):
             # doubling.
             cursor.execute(
                 """UPDATE submission
-                      SET backoff_until = now() + GREATEST(interval '1 day', (now() - last_email_time))
+                      SET backoff_until = now() + COALESCE(last_backoff * 2, interval '1 day'),
+                          last_backoff = COALESCE(last_backoff * 2, interval '1 day')
                     WHERE commitfest_id = %s
                       AND submission_id = %s""",
                 (commitfest_id, submission_id),
             )
+        else:
+            cursor.execute(
+                """UPDATE submission
+                      SET backoff_until = NULL,
+                          last_backoff = NULL
+                    WHERE commitfest_id = %s
+                      AND submission_id = %s""",
+                (commitfest_id, submission_id),
+            )
+
     conn.commit()
 
 
