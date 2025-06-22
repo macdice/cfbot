@@ -176,18 +176,16 @@ def get_submissions_for_commitfest(commitfest_id):
 
 def get_current_commitfest_id():
     """Find the ID of the current open or next future Commitfest."""
-    result = None
-    for line in cfbot_util.slow_fetch(cfbot_config.COMMITFEST_HOST).splitlines():
-        groups = re.search(
-            '<a href="/([0-9]+)/">[0-9]+-[0-9]+</a> \((Open|In Progress) ', line
-        )
-        if groups:
-            commitfest_id = groups.group(1)
-            groups.group(2)
-            result = int(commitfest_id)
-    if result is None:
-        raise Exception("Could not determine the current Commitfest ID")
-    return result
+    data = cfbot_util.slow_fetch_json(
+        f"{cfbot_config.COMMITFEST_HOST}/api/v1/commitfests/needs_ci"
+    )
+    cfs = data["commitfests"]
+
+    in_progress = cfs.get("in_progress")
+    if in_progress is not None:
+        return in_progress["id"]
+
+    return cfs["open"]["id"]
 
 
 if __name__ == "__main__":
