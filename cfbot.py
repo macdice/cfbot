@@ -31,7 +31,7 @@ def try_lock():
 def run():
     with cfbot_util.db() as conn:
         # get the current Commitfest ID
-        commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
+        cfs = cfbot_commitfest_rpc.get_current_commitfests()
 
         # pull in any build results that we are waiting for
         # XXX would need to aggregate the 'keep_polling' flag if we went
@@ -41,18 +41,23 @@ def run():
         cfbot_cirrus.pull_build_results(conn)
 
         # exchange data with the Commitfest app
-        logging.info("pulling submissions for current commitfest")
-        cfbot_commitfest.pull_submissions(conn, commitfest_id)
-        logging.info("pulling submissions for next commitfest")
-        cfbot_commitfest.pull_submissions(conn, commitfest_id + 1)
-        logging.info("pulling modified threads")
+        for name, cf in cfs.items():
+            if cf is None:
+                logging.info(f"skipping pulling submissions for {name} commitfest")
+                continue
+
+            logging.info(f"pulling submissions for {name} commitfest")
+            cfbot_commitfest.pull_submissions(conn, cf["id"])
+
+        cf_ids = [cf["id"] for cf in cfs.values() if cf is not None]
+
         cfbot_commitfest.pull_modified_threads(conn)
 
         # build one patch, if it is time for that
-        cfbot_patch.maybe_process_one(conn, commitfest_id)
+        cfbot_patch.maybe_process_one(conn, cf_ids)
 
         # rebuild a new set of web pages
-        cfbot_web.rebuild(conn, commitfest_id)
+        cfbot_web.rebuild(conn, cfs, cf_ids)
 
         # garbage collect old build results
         cfbot_util.gc(conn)

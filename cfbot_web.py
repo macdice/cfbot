@@ -91,7 +91,7 @@ def load_expected_runtimes(conn):
     return results
 
 
-def load_submissions(conn, commitfest_id):
+def load_submissions(conn, cf_ids):
     results = []
     cursor = conn.cursor()
     cursor.execute(
@@ -102,7 +102,7 @@ def load_submissions(conn, commitfest_id):
                            s.status,
                            s.last_branch_message_id
                       FROM submission s
-                     WHERE s.commitfest_id >= %s
+                     WHERE s.commitfest_id = ANY(%s)
                        AND s.status IN ('Ready for Committer',
                                         'Needs review',
                                         'Waiting on Author')
@@ -112,7 +112,7 @@ def load_submissions(conn, commitfest_id):
                              ELSE 2
                            END,
                            s.name""",
-        (commitfest_id,),
+        (cf_ids,),
     )
     for (
         commitfest_id,
@@ -240,26 +240,30 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
     return results
 
 
-def rebuild(conn, commitfest_id):
-    submissions = load_submissions(conn, commitfest_id)
-    build_page(
-        conn,
-        "x",
-        commitfest_id,
-        submissions,
-        None,
-        None,
-        os.path.join(cfbot_config.WEB_ROOT, "index.html"),
-    )
-    build_page(
-        conn,
-        "x",
-        commitfest_id + 1,
-        submissions,
-        None,
-        None,
-        os.path.join(cfbot_config.WEB_ROOT, "next.html"),
-    )
+def rebuild(conn, cfs, cf_ids):
+    submissions = load_submissions(conn, cf_ids)
+    current_cf_id = cfs["open"]["id"]
+    for name, cf in cfs.items():
+        if cfs["in_progress"]:
+            file_name = "index.html"
+        elif name == "open":
+            if not cfs["in_progress"]:
+                file_name = "index.html"
+            else:
+                file_name = "next.html"
+        else:
+            file_name = "drafts.html"
+
+        build_page(
+            conn,
+            "x",
+            current_cf_id,
+            submissions,
+            None,
+            None,
+            os.path.join(cfbot_config.WEB_ROOT, file_name),
+        )
+
     for author in unique_authors(submissions):
         build_page(
             conn,
@@ -335,6 +339,7 @@ def build_page(
     <p>
       <a href="index.html">Current commitfest</a> |
       <a href="next.html">Next commitfest</a> |
+      <a href="drafts.html">Draft commitfest</a> |
       <a href="https://wiki.postgresql.org/wiki/Cfbot">FAQ</a> |
       <a href="statistics.html">Statistics</a> |
       <a href="highlights/all.html">Highlights</a>

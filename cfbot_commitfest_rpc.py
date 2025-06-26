@@ -174,22 +174,19 @@ def get_submissions_for_commitfest(commitfest_id):
     return result
 
 
-def get_current_commitfest_id():
+def get_current_commitfests():
     """Find the ID of the current open or next future Commitfest."""
     data = cfbot_util.slow_fetch_json(
         f"{cfbot_config.COMMITFEST_HOST}/api/v1/commitfests/needs_ci"
     )
-    cfs = data["commitfests"]
-
-    in_progress = cfs.get("in_progress")
-    if in_progress is not None:
-        return in_progress["id"]
-
-    return cfs["open"]["id"]
+    return data["commitfests"]
 
 
 if __name__ == "__main__":
-    for sub in get_submissions_for_commitfest(get_current_commitfest_id()):
-        print(str(sub))
+    for name, cf in get_current_commitfests().items():
+        if not cf:
+            continue
+        for sub in get_submissions_for_commitfest(cf["id"]):
+            print(name, str(sub))
     #    print get_thread_url_for_submission(19, 1787)
     # print(get_latest_patches_from_thread_url(get_thread_url_for_submission(37, 2901)))
