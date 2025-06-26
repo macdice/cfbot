@@ -29,7 +29,7 @@ init_template() {
 	# You should only need to init once.
 	mkdir $TEMPLATE_DIR
 	mkdir $TEMPLATE_DIR/work
-	git clone git://git.postgresql.org/git/postgresql.git $TEMPLATE_DIR/work/postgresql
+	git clone https://git.postgresql.org/git/postgresql.git $TEMPLATE_DIR/work/postgresql
 }
 
 destroy_patchburner_if_exists() {

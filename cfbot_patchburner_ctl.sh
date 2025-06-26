@@ -57,7 +57,7 @@ init_template() {
 
 	mkdir $TEMPLATE_HOST_ROOT_PATH/work
 	chown $CFBOT_USER:$CFBOT_USER $TEMPLATE_HOST_ROOT_PATH/work
-	sudo -u $CFBOT_USER git clone git://git.postgresql.org/git/postgresql.git $TEMPLATE_HOST_ROOT_PATH/work/postgresql
+	sudo -u $CFBOT_USER git clone https://git.postgresql.org/git/postgresql.git $TEMPLATE_HOST_ROOT_PATH/work/postgresql
 }
 
 destroy_patchburner_if_exists() {
