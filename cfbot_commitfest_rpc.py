@@ -101,7 +101,6 @@ def get_submissions_for_commitfest(commitfest_id):
     result = []
     # parser = HTMLParser()
     url = f"{cfbot_config.COMMITFEST_HOST}/{commitfest_id}/"
-    next_line_has_version = False
     state = None
     latest_email = None
     authors = ""
@@ -122,9 +121,6 @@ def get_submissions_for_commitfest(commitfest_id):
             submission_id = groups.group(1)
             name = html.unescape(groups.group(2))
             continue
-        if next_line_has_version:
-            next_line_has_version = False
-            continue
         if td_count == 6:
             groups = re.search("<td>([^<]*)</td>", line)
             if groups:
@@ -134,9 +130,8 @@ def get_submissions_for_commitfest(commitfest_id):
         groups = re.search(
             '<td><span class="label label-[^"]*">([^<]+)</span></td>', line
         )
-        if groups:
+        if groups and not state:
             state = groups.group(1)
-            next_line_has_version = True
             continue
         groups = re.search('<td style="white-space: nowrap;" title="([^"]+)">', line)
         if groups:
@@ -151,6 +146,7 @@ def get_submissions_for_commitfest(commitfest_id):
                     latest_email,
                 )
             )
+            state = None
     return result
 
 
