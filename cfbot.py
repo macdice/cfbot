@@ -33,12 +33,7 @@ def run():
         # get the current Commitfest ID
         cfs = cfbot_commitfest_rpc.get_current_commitfests()
 
-        # pull in any build results that we are waiting for
-        # XXX would need to aggregate the 'keep_polling' flag if we went
-        # back to supporting multiple providers, or do something smarter,
-        # but considering the plan to double-down on cirrus and switch to
-        # webhooks, not bothering for now
-        cfbot_cirrus.pull_build_results(conn)
+        cfbot_cirrus.poll_stale_branches(conn)
 
         # exchange data with the Commitfest app
         for name, cf in cfs.items():

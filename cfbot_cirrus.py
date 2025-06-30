@@ -99,27 +99,44 @@ def get_task_results(commit):
     return []
 
 
-def pull_build_results(conn):
+# This is used in two code paths that might run concurrently:
+#
+# 1. While processing a cirrus-task-update job because we got a POST from
+# Cirrus to tell us that a task status changed, but for now we just query all
+# tasks and merge, rather than processing them one at a time.
+#
+# 2. While polling if we haven't heard from Cirrus for a while, to cope with
+# missed notifications.
+def poll_branch(conn, branch_id):
     cursor = conn.cursor()
-    cursor.execute("""SELECT id,
-                           commitfest_id,
-                           submission_id,
-                           commit_id,
-                           created < now() - interval '1 hour' AS timeout_reached
-                      FROM branch
-                     WHERE status = 'testing'""")
-    for (
-        branch_id,
-        commitfest_id,
-        submission_id,
-        commit_id,
-        timeout_reached,
-    ) in cursor.fetchall():
+
+    # Lock branch so that we can compute the new branch status in a serialised
+    # transaction.
+    #
+    # XXX It's not ideal to hold this row lock while we make network
+    # requests...  perhaps we should get_task_results() first, and move
+    # get_artifacts_for_task(), get_commands_for_task() into a new work_queue
+    # job?  But could that make states go backwards?
+    cursor.execute("""SELECT commitfest_id,
+                             submission_id,
+                             commit_id,
+                             status,
+                             created < now()  - interval '1 hour' AS timeout_reached
+                        FROM branch
+                       WHERE id = %s
+                         FOR UPDATE""", (branch_id,))
+
+    commitfest_id, submission_id, commit_id, branch_status, timeout_reached = cursor.fetchone()
+
+    if branch_status == "testing":
+
         keep_polling_branch = False
         submission_needs_backoff = False
         tasks = get_task_results(commit_id)
         if len(tasks) == 0:
+            # if no tasks at all, we're still waiting for them to be created...
             keep_polling_branch = True
+
         position = 0
         posted_at_least_one_task_status = False
         for task in tasks:
@@ -135,6 +152,8 @@ def pull_build_results(conn):
                 task_still_running = True
             if status in ("FAILED", "ABORTED", "ERRORED"):
                 submission_needs_backoff = True
+
+            # check if we already have this task, and what its status is
             cursor.execute(
                 """SELECT status
                      FROM task
@@ -142,6 +161,7 @@ def pull_build_results(conn):
                 (task_id,),
             )
             row = cursor.fetchone()
+
             post_task_status = False
             if row:
                 # only update if status changes, so we can use the modified time
@@ -185,6 +205,7 @@ def pull_build_results(conn):
                             (task_id,),
                         )
             else:
+                # a task we have heard about before
                 cursor.execute(
                     """INSERT INTO task (task_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())""",
@@ -268,6 +289,22 @@ def pull_build_results(conn):
     conn.commit()
 
 
+# Normally, poll_branch() will be called based on webhook callbacks from Cirrus
+# to tell us about changes, so this should often do nothing.  Since that's
+# unreliable, we'll also look out for branches that haven't seen any change in
+# a while so that we can advance the state machine.
+def poll_stale_branches(conn):
+    cursor = conn.cursor()
+    cursor.execute("""SELECT branch.id, MAX(task.modified)
+                        FROM branch
+                        JOIN task ON (branch.commit_id = task.commit_id)
+                       WHERE branch.status = 'testing'
+                       GROUP BY 1
+                      HAVING MAX(task.modified) < now() - interval '0 minutes'""")
+    for branch_id, last_modified in cursor.fetchall():
+        poll_branch(conn, branch_id)
+
+
 def backfill_artifact(conn):
     cursor = conn.cursor()
     cursor.execute("""SELECT commitfest_id, submission_id, task_name, commit_id, task_id
@@ -309,7 +346,8 @@ if __name__ == "__main__":
     #  print(get_commands_for_task('5646021133336576'))
     #   print(get_artifacts_for_task('5636792221696000'))
     with cfbot_util.db() as conn:
-        backfill_artifact(conn)
+        #poll_branch(conn, 200924)
+        poll_stale_branches(conn)
 #    backfill_task_command(conn)
 #    backfill_task_command(conn)
 #    pull_build_results(conn)
