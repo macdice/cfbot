@@ -73,14 +73,16 @@ def insert_work_queue(cursor, type, key):
 def insert_work_queue_if_not_exists(cursor, type, key):
     # skip if there is already an identical item queued and we can lock it
     # without waiting, to deduplicate jobs
-    cursor.execute("""select 1
+    cursor.execute(
+        """select 1
                         from work_queue
                        where type = %s
                          and key is not distinct from %s
                          and status = 'NEW'
                          for update skip locked
                        limit 1""",
-                   (type, key))
+        (type, key),
+    )
     if not cursor.fetchone():
         insert_work_queue(cursor, type, key)
 

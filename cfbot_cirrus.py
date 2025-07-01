@@ -117,19 +117,23 @@ def poll_branch(conn, branch_id):
     # requests...  perhaps we should get_task_results() first, and move
     # get_artifacts_for_task(), get_commands_for_task() into a new work_queue
     # job?  But could that make states go backwards?
-    cursor.execute("""SELECT commitfest_id,
+    cursor.execute(
+        """SELECT commitfest_id,
                              submission_id,
                              commit_id,
                              status,
                              created < now()  - interval '1 hour' AS timeout_reached
                         FROM branch
                        WHERE id = %s
-                         FOR UPDATE""", (branch_id,))
+                         FOR UPDATE""",
+        (branch_id,),
+    )
 
-    commitfest_id, submission_id, commit_id, branch_status, timeout_reached = cursor.fetchone()
+    commitfest_id, submission_id, commit_id, branch_status, timeout_reached = (
+        cursor.fetchone()
+    )
 
     if branch_status == "testing":
-
         keep_polling_branch = False
         submission_needs_backoff = False
         tasks = get_task_results(commit_id)
@@ -292,11 +296,13 @@ def poll_branch(conn, branch_id):
 # Called when processing a webhook event from a work_queue.
 def poll_branch_for_commit_id(conn, commit_id):
     cursor = conn.cursor()
-    cursor.execute("""SELECT id
+    cursor.execute(
+        """SELECT id
                         FROM branch
                        WHERE commit_id = %s""",
-                   (commit_id,))
-    for branch_id, in cursor.fetchall():
+        (commit_id,),
+    )
+    for (branch_id,) in cursor.fetchall():
         poll_branch(conn, branch_id)
 
 
@@ -357,8 +363,8 @@ if __name__ == "__main__":
     #  print(get_commands_for_task('5646021133336576'))
     #   print(get_artifacts_for_task('5636792221696000'))
     with cfbot_util.db() as conn:
-        #poll_branch(conn, 200924)
-        poll_branch_for_commit_id(conn, '78526a6b703ed7a8efed9762692ef48ef32ccd8e')
+        # poll_branch(conn, 200924)
+        poll_branch_for_commit_id(conn, "78526a6b703ed7a8efed9762692ef48ef32ccd8e")
 #    backfill_task_command(conn)
 #    backfill_task_command(conn)
 #    pull_build_results(conn)
