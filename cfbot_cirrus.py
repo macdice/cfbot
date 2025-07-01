@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import cfbot_config
 import cfbot_util
+import cfbot_work_queue
 
 import requests
 
@@ -203,10 +204,8 @@ def poll_branch(conn, branch_id):
                                 (task_id, name, xtype, status, duration),
                             )
                         # the actual log bodies can be fetched later (and will trigger more jobs)
-                        cursor.execute(
-                            """insert into work_queue (type, key, status)
-                                values ('fetch-task-logs', %s, 'NEW')""",
-                            (task_id,),
+                        cfbot_work_queue.insert_work_queue(
+                            cursor, "fetch-task-logs", task_id
                         )
             else:
                 # a task we have heard about before
@@ -230,11 +229,7 @@ def poll_branch(conn, branch_id):
 
             if post_task_status:
                 # tell the commitfest app
-                cursor.execute(
-                    """INSERT into work_queue (type, key, status)
-                       VALUES ('post-task-status', %s, 'NEW')""",
-                    (task_id,),
-                )
+                cfbot_work_queue.insert_work_queue(cursor, "post-task-status", task_id)
                 posted_at_least_one_task_status = True
 
         if timeout_reached:
@@ -259,10 +254,8 @@ def poll_branch(conn, branch_id):
                 # task status messages include the branch status so no point in
                 # posting another update unless we haven't queued one already
                 # in this transaction
-                cursor.execute(
-                    """INSERT INTO work_queue (type, key, status)
-                       VALUES ('post-branch-status', %s, 'NEW')""",
-                    (branch_id,),
+                cfbot_work_queue.insert_work_queue(
+                    cursor, "post-branch-status", branch_id
                 )
 
         if submission_needs_backoff:

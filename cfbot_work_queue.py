@@ -68,6 +68,7 @@ def insert_work_queue(cursor, type, key):
         """insert into work_queue (type, key, status) values (%s, %s, 'NEW')""",
         (type, key),
     )
+    cursor.execute("notify work_queue")
 
 
 def insert_work_queue_if_not_exists(cursor, type, key):

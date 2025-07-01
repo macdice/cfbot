@@ -15,6 +15,7 @@
 import cfbot_commitfest_rpc
 import cfbot_config
 import cfbot_util
+import cfbot_work_queue
 import logging
 import os
 import re
@@ -370,10 +371,7 @@ def process_submission(conn, commitfest_id, submission_id):
             (commitfest_id, submission_id, log_url),
         )
         (branch_id,) = cursor.fetchone()
-        cursor.execute(
-            """INSERT INTO work_queue (type, key, status) VALUES ('post-branch-status', %s, 'NEW')""",
-            (branch_id,),
-        )
+        cfbot_work_queue.insert_work_queue(cursor, "post-branch-status", branch_id)
         if not cfbot_config.PRODUCTION:
             print(output)
 
@@ -432,10 +430,7 @@ def process_submission(conn, commitfest_id, submission_id):
             ),
         )
         (branch_id,) = cursor.fetchone()
-        cursor.execute(
-            """INSERT INTO work_queue (type, key, status) VALUES ('post-branch-status', %s, 'NEW')""",
-            (branch_id,),
-        )
+        cfbot_work_queue.insert_work_queue(cursor, "post-branch-status", branch_id)
 
     # record that we have processed this commit ID and message ID
     #
