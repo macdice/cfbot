@@ -208,7 +208,7 @@ def poll_branch(conn, branch_id):
                             cursor, "fetch-task-logs", task_id
                         )
             else:
-                # a task we have heard about before
+                # a task we haven't heard about before
                 cursor.execute(
                     """INSERT INTO task (task_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())""",
@@ -291,8 +291,10 @@ def poll_branch_for_commit_id(conn, commit_id):
     cursor = conn.cursor()
     cursor.execute(
         """SELECT id
-                        FROM branch
-                       WHERE commit_id = %s""",
+             FROM branch
+            WHERE commit_id = %s
+            ORDER BY created
+            LIMIT 1""",
         (commit_id,),
     )
     for (branch_id,) in cursor.fetchall():
