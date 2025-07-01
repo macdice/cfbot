@@ -36,9 +36,9 @@ app = Flask("cfbot_api")
 def cirrus_webhook():
     try:
         event = request.json
-        if "build" in event and "task" in event and "changeIdInRepo" in event["build"] and "id" in event["task"]:
+        if "build" in event and "changeIdInRepo" in event["build"]:
             cursor = conn.cursor()
-            cfbot_work_queue.insert_work_queue(cursor, "cirrus-task-update", event["build"]["changeIdInRepo"] + ":" + str(event["task"]["id"]))
+            cfbot_work_queue.insert_work_queue_if_not_exists(cursor, "poll-cirrus-branch", event["build"]["changeIdInRepo"])
             conn.commit()
             return "OK"
         else:

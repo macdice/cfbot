@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import cfbot_cirrus
 import cfbot_commitfest
 import cfbot_config
 import cfbot_util
@@ -67,6 +68,21 @@ def insert_work_queue(cursor, type, key):
         """insert into work_queue (type, key, status) values (%s, %s, 'NEW')""",
         (type, key),
     )
+
+
+def insert_work_queue_if_not_exists(cursor, type, key):
+    # skip if there is already an identical item queued and we can lock it
+    # without waiting, to deduplicate jobs
+    cursor.execute("""select 1
+                        from work_queue
+                       where type = %s
+                         and key is not distinct from %s
+                         and status = 'NEW'
+                         for update skip locked
+                       limit 1""",
+                   (type, key))
+    if not cursor.fetchone():
+        insert_work_queue(cursor, type, key)
 
 
 def lock_task(cursor, task_id):
@@ -513,6 +529,8 @@ def process_one_job(conn, fetch_only):
             analyze_task_tests(conn, key)
         elif type == "refresh-highlight-pages":
             refresh_highlight_pages(conn, key)
+        elif type == "poll-cirrus-branch":
+            cfbot_cirrus.poll_branch_for_commit_id(conn, key)
         elif type == "post-task-status":
             cfbot_commitfest.post_task_status(conn, key)
         elif type == "post-branch-status":
