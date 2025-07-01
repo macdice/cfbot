@@ -127,7 +127,7 @@ def poll_stale_branch(conn, branch_id):
             (branch_id,),
         )
         if cursor.rowsaffected() == 1:
-            logging.info("branch %s has timed out", branch_id)
+            logging.info("branch %s testing -> timeout", branch_id, branch_status)
             cfbot_work_queue.insert_work_queue(cursor, "post-branch-status", branch_id)
     else:
         # Schedule a poll of every build associated with this commit ID that is
@@ -164,6 +164,7 @@ def poll_build(conn, build_id):
                  ON CONFLICT DO NOTHING""",
         (build_id,),
     )
+    inserted = cursor.rowcount > 0
     cursor.execute(
         """SELECT status
                         FROM build
@@ -180,6 +181,7 @@ def poll_build(conn, build_id):
     # If unknown to Cirrus (?!), then we're done, but we make sure we don't
     # leave our weird NULL record behind for other transactions to see.
     if not build:
+        logging.info("Cirrus does not know build %s", build_id)
         cursor.execute("""DELETE FROM build
                            WHERE build_id = %s
                              AND status IS NULL""")
@@ -224,6 +226,7 @@ def poll_build(conn, build_id):
             # only update if status changes, so we can use the modified time
             (old_task_status,) = row
             if old_task_status != task_status:
+                logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
                 cursor.execute(
                     """UPDATE task
                           SET status = %s,
@@ -278,6 +281,7 @@ def poll_build(conn, build_id):
             )
             commitfest_id, submission_id = cursor.fetchone()
 
+            logging.info("new task %s %s", task_id, task_status)
             cursor.execute(
                 """INSERT INTO task (task_id, build_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())""",
@@ -297,6 +301,12 @@ def poll_build(conn, build_id):
             if task_status != "CREATED":
                 # tell the commitfest app
                 cfbot_work_queue.insert_work_queue(cursor, "post-task-status", task_id)
+
+    if old_build_status != build_status:
+        if inserted:
+            logging.info("new build %s %s", build_id, build_status)
+        else:
+            logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
 
     # If this build has reached a final state, then find any branches that have
     # this commit ID (usually just one), and if this is the most recent build
@@ -322,6 +332,7 @@ def poll_build(conn, build_id):
             (branch_status, commit_id, commit_id, build_id),
         )
         for (branch_id,) in cursor.fetchall():
+            logging.info("branch %s testing -> %s", branch_id, branch_status)
             cfbot_work_queue.insert_work_queue(cursor, "post-branch-status", branch_id)
 
 
