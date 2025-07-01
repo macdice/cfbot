@@ -286,7 +286,7 @@ def poll_branch(conn, branch_id):
     conn.commit()
 
 
-# Called when processing a webhook event from a work_queue.
+# Handler for "poll-cirrus-branch" work_queue jobs.
 def poll_branch_for_commit_id(conn, commit_id):
     cursor = conn.cursor()
     cursor.execute(
@@ -302,17 +302,23 @@ def poll_branch_for_commit_id(conn, commit_id):
 # Normally, poll_branch() will be called based on webhook callbacks from Cirrus
 # to tell us about changes, so this should often do nothing.  Since that's
 # unreliable, we'll also look out for branches that haven't seen any change in
-# a while so that we can advance the state machine.
+# a while so that we can advance the state machine, and queue up poll jobs
+# directly.
+#
+# Handler for "poll-stale-cirrus-branches".
 def poll_stale_branches(conn):
     cursor = conn.cursor()
-    cursor.execute("""SELECT branch.id, MAX(task.modified)
+    cursor.execute("""SELECT branch.commit_id, MAX(task.modified)
                         FROM branch
                         JOIN task ON (branch.commit_id = task.commit_id)
                        WHERE branch.status = 'testing'
                        GROUP BY 1
-                      HAVING MAX(task.modified) < now() - interval '5 minutes'""")
-    for branch_id, last_modified in cursor.fetchall():
-        poll_branch(conn, branch_id)
+                      HAVING MAX(task.modified) < now() - interval '0 minutes'""")
+    for commit_id, last_modified in cursor.fetchall():
+        cfbot_work_queue.insert_work_queue_if_not_exists(
+            cursor, "poll-cirrus-branch", commit_id
+        )
+    conn.commit()
 
 
 def backfill_artifact(conn):
@@ -356,8 +362,9 @@ if __name__ == "__main__":
     #  print(get_commands_for_task('5646021133336576'))
     #   print(get_artifacts_for_task('5636792221696000'))
     with cfbot_util.db() as conn:
+        poll_stale_branches(conn)
         # poll_branch(conn, 200924)
-        poll_branch_for_commit_id(conn, "78526a6b703ed7a8efed9762692ef48ef32ccd8e")
+        # poll_branch_for_commit_id(conn, "78526a6b703ed7a8efed9762692ef48ef32ccd8e")
 #    backfill_task_command(conn)
 #    backfill_task_command(conn)
 #    pull_build_results(conn)
