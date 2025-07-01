@@ -7,6 +7,7 @@ import cfbot_util
 import cfbot_web_highlights
 import re
 import scipy.stats
+import select
 import requests
 import time
 import logging
@@ -595,17 +596,25 @@ def process_one_job(conn, fetch_only):
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
         cursor = conn.cursor()
-        cursor.execute("set application_name = 'cfbot_queue_worker'")
-        cursor.execute(
-            "select count(*) from pg_stat_activity where application_name = 'cfbot_queue_worker'"
-        )
-        (nworkers,) = cursor.fetchone()
-        # normally we start one of these every minute and finishes quickly, but
-        # we're prepared to run several at once to clear a backlog
-        if nworkers < cfbot_config.CONCURRENT_QUEUE_WORKERS:
-            cursor.execute("set synchronous_commit = off")
-            # ingest_task_logs(conn, "5009777160355840")
-            # conn.commit()
-            # process_one_job(conn)
+        cursor.execute("set application_name = 'cfbot_worker'")
+        cursor.execute("set synchronous_commit = off")
+        cursor.execute("listen work_queue")
+
+        # run until interrupted by a signal
+        #
+        # XXX need to handle supervisord's first signal and exit nicely after
+        # finishing the job we're working on, for clean shutdown
+        while True:
+            # process as many jobs as we can without waiting
             while process_one_job(conn, False):
-                pass
+                conn.notifications.clear()
+
+            # wait for NOTIFY to wake us up
+            #
+            # XXX correct way to get socket fd?
+            # XXX transactions block  delivery
+            conn.autocommit = True
+            conn.commit()
+            select.select([conn._usock], [], [])
+            conn.notifications.clear()
+            conn.autocommit = False
