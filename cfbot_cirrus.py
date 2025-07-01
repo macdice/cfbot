@@ -184,7 +184,8 @@ def poll_build(conn, build_id):
         logging.info("Cirrus does not know build %s", build_id)
         cursor.execute("""DELETE FROM build
                            WHERE build_id = %s
-                             AND status IS NULL""")
+                             AND status IS NULL""",
+                       (build_id,))
         return
 
     commit_id = build["changeIdInRepo"]
