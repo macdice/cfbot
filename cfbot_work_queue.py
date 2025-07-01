@@ -538,10 +538,12 @@ def process_one_job(conn, fetch_only):
             analyze_task_tests(conn, key)
         elif type == "refresh-highlight-pages":
             refresh_highlight_pages(conn, key)
-        elif type == "poll-stale-cirrus-branches":
+        elif type == "poll-stale-branches":
             cfbot_cirrus.poll_stale_branches(conn)
-        elif type == "poll-cirrus-branch":
-            cfbot_cirrus.poll_branch_for_commit_id(conn, key)
+        elif type == "poll-stale-branch":
+            cfbot_cirrus.poll_stale_branch(conn, key)
+        elif type == "poll-build":
+            cfbot_cirrus.poll_build(conn, key)
         elif type == "post-task-status":
             cfbot_commitfest.post_task_status(conn, key)
         elif type == "post-branch-status":

@@ -1,6 +1,7 @@
 import cfbot_config
 import cfbot_util
 import cfbot_work_queue
+import logging
 import json
 
 from flask import Flask
@@ -40,10 +41,11 @@ app = Flask("cfbot_api")
 def cirrus_webhook():
     try:
         event = request.json
-        if "build" in event and "changeIdInRepo" in event["build"]:
+        logging.info("Cirrus webhook: %s", event)
+        if "build" in event and "id" in event["build"]:
             cursor = conn.cursor()
             cfbot_work_queue.insert_work_queue_if_not_exists(
-                cursor, "poll-cirrus-branch", event["build"]["changeIdInRepo"]
+                cursor, "poll-build", event["build"]["id"]
             )
             conn.commit()
             return "OK"
@@ -51,4 +53,5 @@ def cirrus_webhook():
             return "not understood"
     except RuntimeError as e:
         error_cleanup()
+        logging.exception("Error processing webhook")
         return "NOT OK: " + str(e)
