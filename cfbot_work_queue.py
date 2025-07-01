@@ -64,7 +64,7 @@ def insert_highlight(cursor, task_id, type, source, excerpt, types):
     )
 
 
-def insert_work_queue(cursor, type, key):
+def insert_work_queue(cursor, type, key=None):
     cursor.execute(
         """insert into work_queue (type, key, status) values (%s, %s, 'NEW') returning id""",
         (type, key),
@@ -74,7 +74,7 @@ def insert_work_queue(cursor, type, key):
     cursor.execute("notify work_queue")
 
 
-def insert_work_queue_if_not_exists(cursor, type, key):
+def insert_work_queue_if_not_exists(cursor, type, key=None):
     # skip if there is already an identical item queued and we can lock it
     # without waiting, to deduplicate jobs
     cursor.execute(
