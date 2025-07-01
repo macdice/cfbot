@@ -8,6 +8,7 @@ import cfbot_web_highlights
 import re
 import scipy.stats
 import requests
+import time
 import logging
 
 # Patterns to look out for in artifact files.
@@ -65,9 +66,11 @@ def insert_highlight(cursor, task_id, type, source, excerpt, types):
 
 def insert_work_queue(cursor, type, key):
     cursor.execute(
-        """insert into work_queue (type, key, status) values (%s, %s, 'NEW')""",
+        """insert into work_queue (type, key, status) values (%s, %s, 'NEW') returning id""",
         (type, key),
     )
+    (id,) = cursor.fetchone()
+    logging.info("work_queue insert: id = %d, type = %s, key = %s", id, type, key)
     cursor.execute("notify work_queue")
 
 
@@ -518,6 +521,9 @@ def process_one_job(conn, fetch_only):
     if not id:
         return True  # done, go around again
 
+    logging.info("work_queue begin:  id = %d, type = %s, key = %s", id, type, key)
+    start_time = time.time()
+
     # dispatch to the right work handler
     try:
         if type == "fetch-task-logs":
@@ -540,17 +546,39 @@ def process_one_job(conn, fetch_only):
             cfbot_commitfest.post_branch_status(conn, key)
         else:
             pass
-    except requests.exceptions.ReadTimeout:
-        logging.error("Failed to process work queue due to a timeout")
+    except (
+        requests.exceptions.ReadTimeout,
+        requests.exceptions.ConnectionError,
+        requests.exceptions.HTTPError,
+    ) as e:
+        # these are all exceptions that happy often and randomly due to flaky
+        # web services, and we're brave enough to continue and retry a couple
+        # of times after the lease expires
+        logging.error(
+            "work_queue retryable error: id = %d, type = %s, key = %s, error = %s",
+            id,
+            type,
+            key,
+            e,
+        )
+        conn.rollback()
         return False
-    except requests.exceptions.ConnectionError:
-        logging.error("Failed to process work queue due to a connection error")
-        return False
-    except requests.exceptions.HTTPError as e:
-        logging.error("Failed to process work queue due to an HTTP error: %s", e)
-        return False
+    except:
+        # for anything else, things are not good: log with exception stack
+        # trace and rethrow so we blow up and attract more attention
+        logging.exception(
+            "work_queue fatal error: id = %d, type = %s, key = %s", id, type, key
+        )
+        raise
 
     # if we made it this far without an error, this work item is done
+    logging.info(
+        "work_queue finish: id = %d, type = %s, key = %s, elapsed = %0.03fs",
+        id,
+        type,
+        key,
+        time.time() - start_time,
+    )
     cursor.execute(
         """delete from work_queue
                        where id = %s""",
