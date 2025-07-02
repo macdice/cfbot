@@ -226,7 +226,6 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
        FROM latest_tasks
        JOIN task_positions USING (task_name)
   LEFT JOIN prev_statuses USING (task_name)
-      WHERE task_name NOT LIKE '% MinGW64 %'
    ORDER BY position
     """,
             (commit_id, commit_id, commit_id, submission_id),
@@ -359,10 +358,7 @@ def build_page(
       Please check the Commitfest system itself.
     </p>
     <p>
-      News: The two empty circles are placeholders for NetBSD and OpenBSD
-      CI tasks (these are supported OSes that your patch will encounter in
-      the build farm after commit).  See CF item #5360 where they are
-      enabled.  Getting closer to turning them on everywhere...
+      News: The empty circles are paused CI tasks for other OSes that may be enabled soon...
     </p>
     <table>
 """
@@ -494,10 +490,10 @@ def build_page(
                 """
       <tr>
         <td width="8%%">%s/%s</td>
-        <td width="35%%"><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
+        <td width="34%%"><a href="https://commitfest.postgresql.org/%s/%s/">%s</a></td>
         <td width="20%%">%s</td>
-        <td width="5%%" align="right">%s</td>
-        <td width="38%%">%s</td>
+        <td width="4%%" align="right">%s</td>
+        <td width="40%%">%s</td>
 """
                 % (
                     submission.commitfest_id,
