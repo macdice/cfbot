@@ -203,6 +203,7 @@ def make_branch_update_message(conn, branch_id):
     return message
 
 
+# Handler for "post-branch-status" work_queue jobs.
 def post_branch_status(conn, branch_id):
     message = make_branch_update_message(conn, int(branch_id))
     if cfbot_config.COMMITFEST_POST_URL:
@@ -211,6 +212,7 @@ def post_branch_status(conn, branch_id):
         logging.info("would post to cf app: " + json.dumps(message))
 
 
+# Handler for "post-task-status" work_queue jobs.
 def post_task_status(conn, task_id):
     message = make_task_update_message(conn, task_id)
     if not message:

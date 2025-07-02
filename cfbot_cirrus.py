@@ -130,7 +130,9 @@ def poll_stale_branch(conn, branch_id):
         )
         if cursor.rowsaffected() == 1:
             logging.info("branch %s testing -> timeout", branch_id, branch_status)
-            cfbot_work_queue.insert_work_queue(cursor, "post-branch-status", branch_id)
+            cfbot_work_queue.insert_work_queue_if_not_exists(
+                cursor, "post-branch-status", branch_id
+            )
     else:
         # Schedule a poll of every build associated with this commit ID that is
         # not already in a final state.  This should cover problems caused by
@@ -143,7 +145,9 @@ def poll_stale_branch(conn, branch_id):
             build_id = build["id"]
             build_status = build["status"]
             # if build_status not in FINAL_BUILD_STATUSES:
-            cfbot_work_queue.insert_work_queue(cursor, "poll-build", build_id)
+            cfbot_work_queue.insert_work_queue_if_not_exists(
+                cursor, "poll-build", build_id
+            )
 
 
 def maybe_change_branch_status(cursor, build_id, build_status, commit_id):
@@ -176,7 +180,9 @@ def maybe_change_branch_status(cursor, build_id, build_status, commit_id):
             # XXX could check if all tasks are in final state, and if not
             # enqueue poll-build for a final sync?
             logging.info("branch %s testing -> %s", branch_id, branch_status)
-            cfbot_work_queue.insert_work_queue(cursor, "post-branch-status", branch_id)
+            cfbot_work_queue.insert_work_queue_if_not_exists(
+                cursor, "post-branch-status", branch_id
+            )
 
 
 # Handler for "fetch-task-commands", a job enqueued once a task reaches a final
@@ -342,7 +348,9 @@ def ingest_webhook(conn, event_type, event):
                 return
             logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
 
-        cfbot_work_queue.insert_work_queue(cursor, "post-task-status", task_id)
+        cfbot_work_queue.insert_work_queue_if_not_exists(
+            cursor, "post-task-status", task_id
+        )
         if task_status in FINAL_TASK_STATUSES:
             cfbot_work_queue.insert_work_queue(cursor, "fetch-task-commands", task_id)
 
@@ -449,7 +457,7 @@ def poll_build(conn, build_id):
                 # XXX do we really need to filter out CREATED?
                 if task_status != "CREATED":
                     # tell the commitfest app
-                    cfbot_work_queue.insert_work_queue(
+                    cfbot_work_queue.insert_work_queue_if_not_exists(
                         cursor, "post-task-status", task_id
                     )
         else:
@@ -482,7 +490,9 @@ def poll_build(conn, build_id):
             # XXX do we really need to filter out CREATED?
             if task_status != "CREATED":
                 # tell the commitfest app
-                cfbot_work_queue.insert_work_queue(cursor, "post-task-status", task_id)
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "post-task-status", task_id
+                )
 
     if old_build_status != build_status:
         if inserted:

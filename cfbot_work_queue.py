@@ -419,7 +419,7 @@ def fetch_task_artifacts(conn, task_id):
             path,
         )
         # print(url)
-        if (binary := cfbot_util.slow_fetch_binary(url, none_for_404=True)):
+        if binary := cfbot_util.slow_fetch_binary(url, none_for_404=True):
             log = binary_to_safe_utf8(binary)
             cursor.execute(
                 """update artifact set body = %s where task_id = %s and name = %s and path = %s""",
