@@ -181,8 +181,9 @@ def make_task_status_message(conn, task_id):
 
 def make_task_update_message(conn, task_id):
     task_status = make_task_status_message(conn, task_id)
-    if task_status["status"] == "PAUSED":
-        # don't post paused tasks for now, commitfest app does not handle these (yet)
+    if task_status["status"] in ("CREATED", "PAUSED"):
+        # don't post tasks in these states for now, commitfest app does not
+        # handle these (yet)
         return None
 
     branch_status = make_branch_status_message(conn, commit_id=task_status["commit_id"])

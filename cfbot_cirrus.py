@@ -422,8 +422,6 @@ def poll_build(conn, build_id):
         task_name = task["name"]
         task_status = task["status"]
         position = task["localGroupId"] + 1
-        if task_status == "PAUSED":
-            continue  # ignore for now
 
         # check if we already have this task, and what its status is
         cursor.execute(
@@ -454,12 +452,10 @@ def poll_build(conn, build_id):
                         cursor, "fetch-task-commands", task_id
                     )
 
-                # XXX do we really need to filter out CREATED?
-                if task_status != "CREATED":
-                    # tell the commitfest app
-                    cfbot_work_queue.insert_work_queue_if_not_exists(
-                        cursor, "post-task-status", task_id
-                    )
+                # tell the commitfest app
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "post-task-status", task_id
+                )
         else:
             # a task we haven't heard about before
 
@@ -487,12 +483,10 @@ def poll_build(conn, build_id):
                 ),
             )
 
-            # XXX do we really need to filter out CREATED?
-            if task_status != "CREATED":
-                # tell the commitfest app
-                cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "post-task-status", task_id
-                )
+            # tell the commitfest app
+            cfbot_work_queue.insert_work_queue_if_not_exists(
+                cursor, "post-task-status", task_id
+            )
 
     if old_build_status != build_status:
         if inserted:
