@@ -242,9 +242,11 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
 
 def rebuild(conn, cfs, cf_ids):
     submissions = load_submissions(conn, cf_ids)
-    current_cf_id = cfs["open"]["id"]
     for name, cf in cfs.items():
-        if cfs["in_progress"]:
+        if cf is None:
+            continue
+
+        if name == "in_progress":
             file_name = "index.html"
         elif name == "open":
             if not cfs["in_progress"]:
@@ -257,7 +259,7 @@ def rebuild(conn, cfs, cf_ids):
         build_page(
             conn,
             "x",
-            current_cf_id,
+            cf["id"],
             submissions,
             None,
             None,
