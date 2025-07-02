@@ -418,11 +418,12 @@ def fetch_task_artifacts(conn, task_id):
             path,
         )
         # print(url)
-        log = binary_to_safe_utf8(cfbot_util.slow_fetch_binary(url))
-        cursor.execute(
-            """update artifact set body = %s where task_id = %s and name = %s and path = %s""",
-            (log, task_id, name, path),
-        )
+        if (binary := cfbot_util.slow_fetch_binary(url, none_for_404=True)):
+            log = binary_to_safe_utf8(binary)
+            cursor.execute(
+                """update artifact set body = %s where task_id = %s and name = %s and path = %s""",
+                (log, task_id, name, path),
+            )
 
     # defer ingestion to a later step
     insert_work_queue(cursor, "ingest-task-artifacts", task_id)
