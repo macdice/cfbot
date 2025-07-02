@@ -3,6 +3,7 @@ import cfbot_config
 import cfbot_util
 import cfbot_work_queue
 
+import json
 import logging
 import requests
 
@@ -88,6 +89,7 @@ def get_build(build_id):
               id
               name
               status
+              localGroupId
             }
           }
         }
@@ -144,14 +146,212 @@ def poll_stale_branch(conn, branch_id):
             cfbot_work_queue.insert_work_queue(cursor, "poll-build", build_id)
 
 
-# This is used in two code paths that might run concurrently:
+def maybe_change_branch_status(cursor, build_id, build_status, commit_id):
+    # If a build has reached a final state, then find any branches that have
+    # this commit ID (usually just one), and if this is the most recent build
+    # created for that branch then it determines the state of the branch.
+    #
+    # Shared by ingest_webhook() and poll_branch().
+    if build_status in FINAL_BUILD_STATUSES:
+        # XXX wish i'd just used these statuses directly here...
+        if build_status == "COMPLETED":
+            branch_status = "finished"
+        else:
+            branch_status = "failed"
+        cursor.execute(
+            """UPDATE branch
+                             SET status = %s
+                           WHERE commit_id = %s
+                             AND status = 'testing'
+                             AND (SELECT build_id
+                                    FROM build
+                                   WHERE build.commit_id = %s
+                                     AND build.branch_name LIKE '%%/' || branch.submission_id
+                                ORDER BY build.created
+                                   LIMIT 1) = %s
+                       RETURNING id""",
+            (branch_status, commit_id, commit_id, build_id),
+        )
+        for (branch_id,) in cursor.fetchall():
+            # XXX could check if all tasks are in final state, and if not
+            # enqueue poll-build for a final sync?
+            logging.info("branch %s testing -> %s", branch_id, branch_status)
+            cfbot_work_queue.insert_work_queue(cursor, "post-branch-status", branch_id)
+
+
+# Handler for "fetch-task-commands", a job enqueued once a task reaches a final
+# state.
+def fetch_task_commands(conn, task_id):
+    cursor = conn.cursor()
+
+    # if we reached a final state, then it is time to pull down the
+    # artifacts (without bodies) and task commands (steps)
+
+    # fetch the list of artifacts immediately
+    for name, path, size in get_artifacts_for_task(task_id):
+        cursor.execute(
+            """INSERT INTO artifact (task_id, name, path, size)
+               VALUES (%s, %s, %s, %s)
+          ON CONFLICT DO NOTHING""",
+            (task_id, name, path, size),
+        )
+    # artifact bodies will only be fetched after we figure out which tests
+    # failed to avoid downloading too much
+
+    # fetch the list of task commands (steps)
+    for name, xtype, status, duration in get_commands_for_task(task_id):
+        cursor.execute(
+            """INSERT INTO task_command (task_id, name, type, status, duration)
+               VALUES (%s, %s, %s, %s, %s * interval '1 second')""",
+            (task_id, name, xtype, status, duration),
+        )
+    # the actual log bodies can be fetched later (and will trigger more jobs)
+    cfbot_work_queue.insert_work_queue(cursor, "fetch-task-logs", task_id)
+
+
+# Called by cfbot_api.py's /api/cirrus-webhook endpoint with a message described at:
 #
-# 1. While processing a cirrus-task-update job because we got a POST from
-# Cirrus to tell us that a task status changed, but for now we just query all
-# tasks and merge, rather than processing them one at a time.
+# https://cirrus-ci.org/api/#builds-and-tasks-webhooks
 #
-# 2. While polling if we haven't heard from Cirrus for a while, to cope with
-# missed notifications.
+# Since webooks are unreliable, we check that the transition matches the
+# existing database state.  If it doesn't, we enqueue a full poll-build job to
+# resynchonise.
+def ingest_webhook(conn, event_type, event):
+    cursor = conn.cursor()
+
+    # XXX validate to avoid key exceptions on malformed requests
+
+    action = event["action"]
+    build_id = event["build"]["id"]
+    build_status = event["build"]["status"]
+    build_branch = event["build"]["branch"]
+    commit_id = event["build"]["changeIdInRepo"]
+
+    if event_type == "build":
+        if action == "created":
+            cursor.execute(
+                """INSERT INTO build (build_id, status, branch_name, commit_id, created, modified)
+                              VALUES (%s, %s, %s, %s, now(), now())
+                         ON CONFLICT DO NOTHING""",
+                (build_id, build_status, build_branch, commit_id),
+            )
+            if cursor.rowcount == 0:
+                logging.info("webhook out of sync: build %s already exists", build_id)
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "poll-build", build_id
+                )
+                return
+            logging.info("new build %s %s", build_id, build_status)
+        elif action == "updated":
+            old_build_status = event["old_status"]
+            cursor.execute(
+                """UPDATE build
+                      SET status = %s,
+                          modified = now()
+                    WHERE build_id = %s
+                      AND status = %s""",
+                (build_status, build_id, old_build_status),
+            )
+            if cursor.rowcount == 0:
+                logging.info(
+                    "webhook out of sync: build %s does not exist, or does not have previous status %s",
+                    build_id,
+                    old_build_status,
+                )
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "poll-build", build_id
+                )
+                return
+            logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
+        maybe_change_branch_status(cursor, build_id, build_status, commit_id)
+    elif event_type == "task":
+        task_id = event["task"]["id"]
+        task_status = event["task"]["status"]
+        task_name = event["task"]["name"]
+        task_position = event["task"]["localGroupId"] + 1
+
+        if action == "created":
+            cursor.execute(
+                """select 1
+                                from build
+                               where build_id = %s
+                                 for key share""",
+                (build_id,),
+            )
+            if not cursor.fetchone():
+                logging.info(
+                    "webhook out of sync: referenced build %s does not exist", build_id
+                )
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "poll-build", build_id
+                )
+                return
+
+            # XXX we have to guess what the commitfest/submission is, but why
+            # do we even need these columns?
+            cursor.execute(
+                """select commitfest_id, submission_id
+                     from branch
+                    where commit_id = %s
+                 order by created desc
+                    limit 1""",
+                (commit_id,),
+            )
+            commitfest_id, submission_id = cursor.fetchone()
+            cursor.execute(
+                """INSERT INTO task (task_id, build_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+              ON CONFLICT DO NOTHING""",
+                (
+                    task_id,
+                    build_id,
+                    task_position,
+                    commitfest_id,
+                    submission_id,
+                    task_name,
+                    commit_id,
+                    task_status,
+                ),
+            )
+            if cursor.rowcount == 0:
+                logging.info("webhook out of sync: task %s already exists", task_id)
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "poll-build", build_id
+                )
+                return
+            logging.info("new task %s %s", task_id, task_status)
+        elif action == "updated":
+            old_task_status = event["old_status"]
+            cursor.execute(
+                """update task
+                                 set status = %s,
+                                     modified = now()
+                               where task_id = %s
+                                 and status = %s""",
+                (task_status, task_id, old_task_status),
+            )
+            if cursor.rowcount == 0:
+                logging.info(
+                    "webhook out of sync: task %s does not exist, or does not have previous status %s",
+                    task_id,
+                    old_task_status,
+                )
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "poll-build", build_id
+                )
+                return
+            logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
+
+        cfbot_work_queue.insert_work_queue(cursor, "post-task-status", task_id)
+        if task_status in FINAL_TASK_STATUSES:
+            cfbot_work_queue.insert_work_queue(cursor, "fetch-task-commands", task_id)
+
+
+# Handler for "poll-build" jobs.
+#
+# These are created by the "poll-stale-branch" handler, used to poll branches
+# that seem to be stuck. Note that it is careful to lock a build row so that it
+# can safely run concurrently with ingest_webhook().
 def poll_build(conn, build_id):
     cursor = conn.cursor()
 
@@ -209,12 +409,11 @@ def poll_build(conn, build_id):
         )
 
     # Upsert the tasks.
-    position = 0
     for task in tasks:
-        position += 1
         task_id = task["id"]
         task_name = task["name"]
         task_status = task["status"]
+        position = task["localGroupId"] + 1
         if task_status == "PAUSED":
             continue  # ignore for now
 
@@ -240,33 +439,13 @@ def poll_build(conn, build_id):
                 )
 
                 # if we reached a final state, then it is time to pull down the
-                # artifacts (without bodies) and task commands (steps)
-                #
-                # XXX move this work nto a separate step, to reduce the time we
-                # spend with the build row locked?
+                # artifacts (without bodies) and task commands (steps), which
+                # will trigger further work
                 if task_status in FINAL_TASK_STATUSES:
-                    # fetch the list of artifacts immediately
-                    for name, path, size in get_artifacts_for_task(task_id):
-                        cursor.execute(
-                            """INSERT INTO artifact (task_id, name, path, size)
-                               VALUES (%s, %s, %s, %s)
-                          ON CONFLICT DO NOTHING""",
-                            (task_id, name, path, size),
-                        )
-                    # artifact bodies will only be fetched after we figure out which tests
-                    # failed to avoid downloading too much
-
-                    # fetch the list of task commands (steps)
-                    for name, xtype, status, duration in get_commands_for_task(task_id):
-                        cursor.execute(
-                            """INSERT INTO task_command (task_id, name, type, status, duration)
-                               VALUES (%s, %s, %s, %s, %s * interval '1 second')""",
-                            (task_id, name, xtype, status, duration),
-                        )
-                    # the actual log bodies can be fetched later (and will trigger more jobs)
                     cfbot_work_queue.insert_work_queue(
-                        cursor, "fetch-task-logs", task_id
+                        cursor, "fetch-task-commands", task_id
                     )
+
                 # XXX do we really need to filter out CREATED?
                 if task_status != "CREATED":
                     # tell the commitfest app
@@ -311,43 +490,13 @@ def poll_build(conn, build_id):
         else:
             logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
 
-    # If this build has reached a final state, then find any branches that have
-    # this commit ID (usually just one), and if this is the most recent build
-    # created for that branch then it determines the state of the branch.
-    if build_status in FINAL_BUILD_STATUSES:
-        # XXX wish i'd just used these statuses directly here...
-        if build_status == "COMPLETED":
-            branch_status = "finished"
-        else:
-            branch_status = "failed"
-        cursor.execute(
-            """UPDATE branch
-                             SET status = %s
-                           WHERE commit_id = %s
-                             AND status = 'testing'
-                             AND (SELECT build_id
-                                    FROM build
-                                   WHERE build.commit_id = %s
-                                     AND build.branch_name LIKE '%%/' || branch.submission_id
-                                ORDER BY build.created
-                                   LIMIT 1) = %s
-                       RETURNING id""",
-            (branch_status, commit_id, commit_id, build_id),
-        )
-        for (branch_id,) in cursor.fetchall():
-            logging.info("branch %s testing -> %s", branch_id, branch_status)
-            cfbot_work_queue.insert_work_queue(cursor, "post-branch-status", branch_id)
+    maybe_change_branch_status(cursor, build_id, build_status, commit_id)
 
 
-# Normally, poll_build() will be called based on webhook callbacks from Cirrus
-# to tell us about changes, so this should often do nothing.  Since that's
-# unreliable, we'll also look out for branches that haven't seen any change in
-# a while so that we can advance the state machine, and queue up poll jobs
-# directly.
-#
-# TODO branch should have branch_name
-#
 # Handler for "poll-stale-branches".
+#
+# Queued periodically by cron, to look out for branches that we should poll
+# because they seem to be stuck in 'testing' and not moving.
 def poll_stale_branches(conn):
     cursor = conn.cursor()
     cursor.execute("""SELECT branch.id, MAX(task.modified)
@@ -406,7 +555,45 @@ if __name__ == "__main__":
     with cfbot_util.db() as conn:
         # poll_stale_branches(conn)
         # poll_stale_branch(conn, 201003)
-        poll_build(conn, 6247778155757568)
+        # poll_build(conn, 6247778155757568)
+        ingest_webhook(
+            conn,
+            "task",
+            {
+                "old_status": "CREATED",
+                "action": "updated",
+                "repository": {
+                    "id": 5309429912436736,
+                    "owner": "postgresql-cfbot",
+                    "name": "postgresql",
+                    "isPrivate": False,
+                },
+                "build": {
+                    "id": 5275791488974848,
+                    "branch": "cf/4966",
+                    "changeIdInRepo": "1393f0d2323b1c6c92961b66e7228ab649d8cae7",
+                    "changeTimestamp": 1751414782000,
+                    "changeMessageTitle": "[CF 4966] v1 - Parallel CREATE INDEX for GIN indexes",
+                    "status": "EXECUTING",
+                    "user": {"id": 5349278619009024, "username": "postgresql-cfbot"},
+                },
+                "task": {
+                    "id": 5585849976356864,
+                    "name": "SanityCheck",
+                    "status": "TRIGGERED",
+                    "statusTimestamp": 1751414793117,
+                    "creationTimestamp": 1751414792338,
+                    "durationInSeconds": 0,
+                    "uniqueLabels": [],
+                    "localGroupId": 0,
+                    "automaticReRun": False,
+                    "manualRerunCount": 0,
+                    "automaticallyReRunnable": False,
+                    "instanceType": "GCEInstance",
+                    "notifications": [],
+                },
+            },
+        )
         conn.commit()
         # poll_branch_for_commit_id(conn, "78526a6b703ed7a8efed9762692ef48ef32ccd8e")
 #    backfill_task_command(conn)

@@ -1,4 +1,5 @@
 import cfbot_config
+import cfbot_cirrus
 import cfbot_util
 import cfbot_work_queue
 import logging
@@ -40,13 +41,12 @@ app = Flask("cfbot_api")
 @app.route("/api/cirrus-webhook", methods=["POST"])
 def cirrus_webhook():
     try:
+        event_type = request.headers.get("X-Cirrus-Event")
         event = request.json
-        logging.info("Cirrus webhook: %s", event)
-        if "build" in event and "id" in event["build"]:
+        logging.info("Cirrus webhook: type = %s, payload = %s", event_type, event)
+        if event_type and "build" in event and "id" in event["build"]:
             cursor = conn.cursor()
-            cfbot_work_queue.insert_work_queue_if_not_exists(
-                cursor, "poll-build", event["build"]["id"]
-            )
+            cfbot_cirrus.ingest_webhook(conn, event_type, event)
             conn.commit()
             return "OK"
         else:

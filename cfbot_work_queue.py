@@ -531,6 +531,8 @@ def process_one_job(conn, fetch_only):
             fetch_task_logs(conn, key)
         elif type == "ingest-task-logs":
             ingest_task_logs(conn, key)
+        elif type == "fetch-task-commands":
+            cfbot_cirrus.fetch_task_commands(conn, key)
         elif type == "fetch-task-artifacts":
             fetch_task_artifacts(conn, key)
         elif type == "ingest-task-artifacts":
