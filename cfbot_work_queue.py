@@ -8,6 +8,7 @@ import cfbot_web_highlights
 import re
 import scipy.stats
 import select
+import setproctitle
 import requests
 import time
 import logging
@@ -523,6 +524,8 @@ def process_one_job(conn, fetch_only):
     if not id:
         return True  # done, go around again
 
+    setproctitle.setproctitle("cfbot worker: %s %s" % (type, key))
+
     logging.info("work_queue begin:  id = %d, type = %s, key = %s", id, type, key)
     start_time = time.time()
 
@@ -616,6 +619,7 @@ if __name__ == "__main__":
             #
             # XXX correct way to get socket fd?
             # XXX transactions block  delivery
+            setproctitle.setproctitle("cfbot worker: idle")
             conn.autocommit = True
             conn.commit()
             select.select([conn._usock], [], [])
