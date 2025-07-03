@@ -157,7 +157,7 @@ def poll_stale_branch(conn, branch_id):
             build_status = build["status"]
             # if build_status not in FINAL_BUILD_STATUSES:
             cfbot_work_queue.insert_work_queue_if_not_exists(
-                cursor, "poll-build", build_id
+                cursor, "poll-stale-build", build_id
             )
 
 
@@ -188,8 +188,6 @@ def maybe_change_branch_status(cursor, build_id, build_status, commit_id):
             (branch_status, commit_id, commit_id, build_id),
         )
         for (branch_id,) in cursor.fetchall():
-            # XXX could check if all tasks are in final state, and if not
-            # enqueue poll-build for a final sync?
             logging.info("branch %s testing -> %s", branch_id, branch_status)
             cfbot_work_queue.insert_work_queue_if_not_exists(
                 cursor, "post-branch-status", branch_id
@@ -231,7 +229,7 @@ def fetch_task_commands(conn, task_id):
 # https://cirrus-ci.org/api/#builds-and-tasks-webhooks
 #
 # Since webooks are unreliable, we check that the transition matches the
-# existing database state.  If it doesn't, we enqueue a full poll-build job to
+# existing database state.  If it doesn't, we enqueue a poll-stale-build job to
 # resynchonise.
 def ingest_webhook(conn, event_type, event):
     cursor = conn.cursor()
@@ -255,7 +253,7 @@ def ingest_webhook(conn, event_type, event):
             if cursor.rowcount == 0:
                 logging.info("webhook out of sync: build %s already exists", build_id)
                 cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-build", build_id
+                    cursor, "poll-stale-build", build_id
                 )
                 return
             logging.info("new build %s %s", build_id, build_status)
@@ -276,23 +274,28 @@ def ingest_webhook(conn, event_type, event):
                     old_build_status,
                 )
                 cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-build", build_id
+                    cursor, "poll-stale-build", build_id
                 )
                 return
             logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
         if build_status in FINAL_BUILD_STATUSES:
-            cursor.execute("""SELECT COUNT(*)
+            cursor.execute(
+                """SELECT COUNT(*)
                                 FROM task
                                WHERE build_id = %s
                                  AND status NOT IN ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED', 'PAUSED')
                                LIMIT 1""",
-                           (build_id,))
-            running_tasks, = cursor.fetchone()
+                (build_id,),
+            )
+            (running_tasks,) = cursor.fetchone()
             if running_tasks > 0:
-                logging.info("webhook out of sync: build %s has final status but has %d tasks with non-final, non-PAUSED status",
-                             build_id, running_tasks)
+                logging.info(
+                    "webhook out of sync: build %s has final status but has %d tasks with non-final, non-PAUSED status",
+                    build_id,
+                    running_tasks,
+                )
                 cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-build", build_id
+                    cursor, "poll-stale-build", build_id
                 )
         maybe_change_branch_status(cursor, build_id, build_status, commit_id)
     elif event_type == "task":
@@ -314,7 +317,7 @@ def ingest_webhook(conn, event_type, event):
                     "webhook out of sync: referenced build %s does not exist", build_id
                 )
                 cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-build", build_id
+                    cursor, "poll-stale-build", build_id
                 )
                 return
 
@@ -347,7 +350,7 @@ def ingest_webhook(conn, event_type, event):
             if cursor.rowcount == 0:
                 logging.info("webhook out of sync: task %s already exists", task_id)
                 cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-build", build_id
+                    cursor, "poll-stale-build", build_id
                 )
                 return
             logging.info("new task %s %s", task_id, task_status)
@@ -368,7 +371,7 @@ def ingest_webhook(conn, event_type, event):
                     old_task_status,
                 )
                 cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-build", build_id
+                    cursor, "poll-stale-build", build_id
                 )
                 return
             logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
@@ -381,12 +384,12 @@ def ingest_webhook(conn, event_type, event):
             cfbot_work_queue.insert_work_queue(cursor, "fetch-task-commands", task_id)
 
 
-# Handler for "poll-build" jobs.
+# Handler for "poll-stale-build" jobs.
 #
-# These are created by the "poll-stale-branch" handler, used to poll branches
+# These are created by the "poll-stale-branch" handler, used to advance branches
 # that seem to be stuck. Note that it is careful to lock a build row so that it
 # can safely run concurrently with ingest_webhook().
-def poll_build(conn, build_id):
+def poll_stale_build(conn, build_id):
     cursor = conn.cursor()
 
     # Serialise the API calls about this build by making sure we have a row to
