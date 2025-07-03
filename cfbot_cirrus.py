@@ -13,6 +13,8 @@ FINAL_BUILD_STATUSES = ("FAILED", "ABORTED", "ERRORED", "COMPLETED")
 
 # which statuses the cfapp wants to hear about
 POST_TASK_STATUSES = (
+    "CREATED",
+    "PAUSED",
     "SCHEDULED",
     "TRIGGERED",
     "EXECUTING",
