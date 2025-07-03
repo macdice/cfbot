@@ -37,6 +37,11 @@ SVG_CONTENT = {
     "waiting_to_start": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
       <circle cx="26" cy="26" r="25" stroke="gray" fill="none"/>
     </svg>""",
+    "paused": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
+      <circle cx="26" cy="26" r="25" fill="grey"/>
+      <rect x="19" y="16" width="4" height="20" fill="white"/>
+      <rect x="29" y="16" width="4" height="20" fill="white"/>
+      </svg>""",
 }
 
 
@@ -427,6 +432,8 @@ def build_page(
                         html = svg_img("new_failure")
                     else:
                         html = svg_img("old_failure")
+                elif build_result.status in ("PAUSED"):
+                    html = svg_img("paused")
                 elif build_result.status in ("CREATED", "SCHEDULED", "PAUSED"):
                     html = svg_img("waiting_to_start")
                 else:
