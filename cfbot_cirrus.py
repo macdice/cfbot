@@ -346,9 +346,9 @@ def ingest_webhook(conn, event_type, event):
         if action == "created":
             cursor.execute(
                 """select 1
-                                from build
-                               where build_id = %s
-                                 for key share""",
+                     from build
+                    where build_id = %s
+                      for key share""",
                 (build_id,),
             )
             if not cursor.fetchone():
@@ -388,25 +388,49 @@ def ingest_webhook(conn, event_type, event):
             )
             if cursor.rowcount == 0:
                 logging.info("webhook out of sync: task %s already exists", task_id)
-                cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-stale-build", build_id
-                )
+                # XXX seems safe to skip creation without falling back to polling?
+                # cfbot_work_queue.insert_work_queue_if_not_exists(
+                #    cursor, "poll-stale-build", build_id
+                # )
                 return
             logging.info("new task %s %s", task_id, task_status)
         elif action == "updated":
             old_task_status = event["old_status"]
             cursor.execute(
-                """update task
-                                 set status = %s,
-                                     modified = now()
+                """select status
+                                from task
                                where task_id = %s
-                                 and status = %s""",
-                (task_status, task_id, old_task_status),
+                                 for update""",
+                (task_id,),
             )
-            if cursor.rowcount == 0:
+            if row := cursor.fetchone():
+                (existing_task_status,) = row
+            else:
+                existing_task_status = None
+
+            if existing_task_status == task_status:
+                # already has that value, that's OK
                 logging.info(
-                    "webhook out of sync: task %s does not exist, or does not have previous status %s",
+                    "webhook out of sync: task %s already has status %s",
                     task_id,
+                    task_status,
+                )
+                return
+            elif existing_task_status == old_task_status:
+                # common case, only one that doesn't return
+                cursor.execute(
+                    """update task
+                          set status = %s,
+                              modified = now()
+                        where task_id = %s""",
+                    (task_status, task_id),
+                )
+            else:
+                # unexpected value, fix by polling
+                logging.info(
+                    "webhook out of sync: task %s has status %s, expected %s",
+                    task_id,
+                    existing_task_status,
                     old_task_status,
                 )
                 cfbot_work_queue.insert_work_queue_if_not_exists(
@@ -414,7 +438,6 @@ def ingest_webhook(conn, event_type, event):
                 )
                 return
             logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
-
         if task_status in POST_TASK_STATUSES:
             cfbot_work_queue.insert_work_queue_if_not_exists(
                 cursor, "post-task-status", task_id
