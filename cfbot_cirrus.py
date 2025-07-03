@@ -280,6 +280,20 @@ def ingest_webhook(conn, event_type, event):
                 )
                 return
             logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
+        if build_status in FINAL_BUILD_STATUSES:
+            cursor.execute("""SELECT COUNT(*)
+                                FROM task
+                               WHERE build_id = %s
+                                 AND status NOT IN ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED', 'PAUSED')
+                               LIMIT 1""",
+                           (build_id,))
+            running_tasks, = cursor.fetchone()
+            if running_tasks > 0:
+                logging.info("webhook out of sync: build %s has final status but has %d tasks with non-final, non-PAUSED status",
+                             build_id, running_tasks)
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "poll-build", build_id
+                )
         maybe_change_branch_status(cursor, build_id, build_status, commit_id)
     elif event_type == "task":
         task_id = event["task"]["id"]
