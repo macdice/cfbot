@@ -226,6 +226,9 @@ def fetch_task_commands(conn, task_id):
     cfbot_work_queue.insert_work_queue(cursor, "fetch-task-logs", task_id)
 
 
+PRE_EXECUTING_STATUSUS = ("CREATED", "TRIGGERED", "SCHEDULED")
+
+
 # Called by cfbot_api.py's /api/cirrus-webhook endpoint with a message described at:
 #
 # https://cirrus-ci.org/api/#builds-and-tasks-webhooks
@@ -245,41 +248,75 @@ def ingest_webhook(conn, event_type, event):
     commit_id = event["build"]["changeIdInRepo"]
 
     if event_type == "build":
-        if action == "created":
-            cursor.execute(
-                """INSERT INTO build (build_id, status, branch_name, commit_id, created, modified)
-                              VALUES (%s, %s, %s, %s, now(), now())
-                         ON CONFLICT DO NOTHING""",
-                (build_id, build_status, build_branch, commit_id),
-            )
-            if cursor.rowcount == 0:
-                logging.info("webhook out of sync: build %s already exists", build_id)
-                cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-stale-build", build_id
+        cursor.execute(
+            """INSERT INTO build (build_id, status, branch_name, commit_id, created, modified)
+                          VALUES (%s, %s, %s, %s, now(), now())
+                     ON CONFLICT DO NOTHING""",
+            (build_id, build_status, build_branch, commit_id),
+        )
+        if cursor.rowcount == 1:
+            if action != "created":
+                logging.info(
+                    "webhook out of sync, created build %s instead of updating",
+                    build_id,
                 )
-                return
             logging.info("new build %s %s", build_id, build_status)
-        elif action == "updated":
+        elif action == "created":
+            logging.info(
+                "webhook out of sync, build %s already exists, ignoring", build_id
+            )
+            return
+        else:
             old_build_status = event["old_status"]
             cursor.execute(
-                """UPDATE build
-                      SET status = %s,
-                          modified = now()
-                    WHERE build_id = %s
-                      AND status = %s""",
-                (build_status, build_id, old_build_status),
+                """SELECT status
+                                FROM build
+                               WHERE build_id = %s
+                                 FOR UPDATE""",
+                (build_id,),
             )
-            if cursor.rowcount == 0:
+            (existing_build_status,) = cursor.fetchone()
+            if existing_build_status == build_status:
                 logging.info(
-                    "webhook out of sync: build %s does not exist, or does not have previous status %s",
+                    "webhook out of sync, build %s already has status %s, ignoring",
                     build_id,
+                    build_status,
+                )
+                return
+            elif existing_build_status == old_build_status or (
+                build_status == "EXECUTING"
+                and existing_build_status in PRE_EXECUTING_STATUSES
+                and old_build_status in PRE_EXECUTING_STATUSES
+            ):
+                if existing_build_status != old_build_status:
+                    logging.info(
+                        "webhook out of sync, build %s expected to have %s but it has %s, assuming dropped webhooks and allowing transition to %s",
+                        build_id,
+                        old_build_status,
+                        existing_build_status,
+                        build_status,
+                    )
+                cursor.execute(
+                    """UPDATE build
+                          SET status = %s,
+                              modified = now()
+                        WHERE build_id = %s""",
+                    (build_status, build_id),
+                )
+                logging.info(
+                    "build %s %s -> %s", build_id, existing_build_status, build_status
+                )
+            else:
+                logging.info(
+                    "webhook out of sync, build %s has status %s but expected %s",
+                    build_id,
+                    existing_build_status,
                     old_build_status,
                 )
                 cfbot_work_queue.insert_work_queue_if_not_exists(
                     cursor, "poll-stale-build", build_id
                 )
                 return
-            logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
         if build_status in FINAL_BUILD_STATUSES:
             cursor.execute(
                 """SELECT COUNT(*)
