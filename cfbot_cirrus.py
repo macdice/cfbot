@@ -11,6 +11,17 @@ import requests
 FINAL_TASK_STATUSES = ("FAILED", "ABORTED", "ERRORED", "COMPLETED")
 FINAL_BUILD_STATUSES = ("FAILED", "ABORTED", "ERRORED", "COMPLETED")
 
+# which statuses the cfapp wants to hear about
+POST_TASK_STATUSES = (
+    "SCHEDULED",
+    "TRIGGERED",
+    "EXECUTING",
+    "FAILED",
+    "ABORTED",
+    "ERRORED",
+    "COMPLETED",
+)
+
 
 def query_cirrus(query, variables):
     request = requests.post(
@@ -348,9 +359,10 @@ def ingest_webhook(conn, event_type, event):
                 return
             logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
 
-        cfbot_work_queue.insert_work_queue_if_not_exists(
-            cursor, "post-task-status", task_id
-        )
+        if task_status in POST_TASK_STATUSES:
+            cfbot_work_queue.insert_work_queue_if_not_exists(
+                cursor, "post-task-status", task_id
+            )
         if task_status in FINAL_TASK_STATUSES:
             cfbot_work_queue.insert_work_queue(cursor, "fetch-task-commands", task_id)
 
@@ -453,9 +465,10 @@ def poll_build(conn, build_id):
                     )
 
                 # tell the commitfest app
-                cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "post-task-status", task_id
-                )
+                if task_status in POST_TASK_STATUSES:
+                    cfbot_work_queue.insert_work_queue_if_not_exists(
+                        cursor, "post-task-status", task_id
+                    )
         else:
             # a task we haven't heard about before
 
@@ -484,9 +497,10 @@ def poll_build(conn, build_id):
             )
 
             # tell the commitfest app
-            cfbot_work_queue.insert_work_queue_if_not_exists(
-                cursor, "post-task-status", task_id
-            )
+            if task_status in POST_TASK_STATUSES:
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "post-task-status", task_id
+                )
 
     if old_build_status != build_status:
         if inserted:
