@@ -61,12 +61,13 @@ def slow_fetch_json(url, none_for_404=False):
 
 
 def post(url, d):
-    get_http_session().post(
+    response = get_http_session().post(
         url,
         headers={"User-Agent": cfbot_config.USER_AGENT},
         json=d,
         timeout=cfbot_config.TIMEOUT,
     )
+    response.raise_for_status()
 
 
 def gc(conn):
