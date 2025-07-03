@@ -181,10 +181,6 @@ def make_task_status_message(conn, task_id):
 
 def make_task_update_message(conn, task_id):
     task_status = make_task_status_message(conn, task_id)
-    if task_status["status"] in ("CREATED", "PAUSED"):
-        # don't post tasks in these states for now, commitfest app does not
-        # handle these (yet)
-        return None
 
     branch_status = make_branch_status_message(conn, commit_id=task_status["commit_id"])
     message = {
@@ -216,8 +212,6 @@ def post_branch_status(conn, branch_id):
 # Handler for "post-task-status" work_queue jobs.
 def post_task_status(conn, task_id):
     message = make_task_update_message(conn, task_id)
-    if not message:
-        return
 
     if cfbot_config.COMMITFEST_POST_URL:
         cfbot_util.post(cfbot_config.COMMITFEST_POST_URL, message)
