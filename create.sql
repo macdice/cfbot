@@ -2,12 +2,13 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.13
--- Dumped by pg_dump version 14.13
+-- Dumped from database version 17.5
+-- Dumped by pg_dump version 17.5
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -72,7 +73,7 @@ CREATE SEQUENCE public.branch_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.branch_id_seq OWNER TO cfbot;
+ALTER SEQUENCE public.branch_id_seq OWNER TO cfbot;
 
 --
 -- Name: branch_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cfbot
@@ -80,6 +81,22 @@ ALTER TABLE public.branch_id_seq OWNER TO cfbot;
 
 ALTER SEQUENCE public.branch_id_seq OWNED BY public.branch.id;
 
+
+--
+-- Name: build; Type: TABLE; Schema: public; Owner: cfbot
+--
+
+CREATE TABLE public.build (
+    build_id text NOT NULL,
+    branch_name text,
+    status text,
+    commit_id text,
+    created timestamp with time zone NOT NULL,
+    modified timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.build OWNER TO cfbot;
 
 --
 -- Name: highlight; Type: TABLE; Schema: public; Owner: cfbot
@@ -131,7 +148,8 @@ CREATE TABLE public.task (
     created timestamp with time zone NOT NULL,
     modified timestamp with time zone NOT NULL,
     task_id text NOT NULL,
-    "position" integer NOT NULL
+    "position" integer NOT NULL,
+    build_id text
 );
 
 
@@ -218,7 +236,7 @@ CREATE SEQUENCE public.work_queue_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.work_queue_id_seq OWNER TO cfbot;
+ALTER SEQUENCE public.work_queue_id_seq OWNER TO cfbot;
 
 --
 -- Name: work_queue_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cfbot
@@ -255,6 +273,14 @@ ALTER TABLE ONLY public.artifact
 
 ALTER TABLE ONLY public.branch
     ADD CONSTRAINT branch_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: build build_pkey; Type: CONSTRAINT; Schema: public; Owner: cfbot
+--
+
+ALTER TABLE ONLY public.build
+    ADD CONSTRAINT build_pkey PRIMARY KEY (build_id);
 
 
 --
@@ -305,6 +331,13 @@ CREATE INDEX branch_submission_id_created_idx ON public.branch USING btree (subm
 
 
 --
+-- Name: build_commit_id_idx; Type: INDEX; Schema: public; Owner: cfbot
+--
+
+CREATE INDEX build_commit_id_idx ON public.build USING btree (commit_id);
+
+
+--
 -- Name: highlight_task_id_type_idx; Type: INDEX; Schema: public; Owner: cfbot
 --
 
@@ -333,6 +366,13 @@ CREATE INDEX task_submission_id_idx ON public.task USING btree (submission_id);
 
 
 --
+-- Name: work_queue_type_key_idx; Type: INDEX; Schema: public; Owner: cfbot
+--
+
+CREATE INDEX work_queue_type_key_idx ON public.work_queue USING btree (type, key) WHERE (status = 'NEW'::text);
+
+
+--
 -- Name: branch branch_commitfest_id_submission_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: cfbot
 --
 
@@ -346,6 +386,14 @@ ALTER TABLE ONLY public.branch
 
 ALTER TABLE ONLY public.task
     ADD CONSTRAINT build_result_commitfest_id_fkey FOREIGN KEY (commitfest_id, submission_id) REFERENCES public.submission(commitfest_id, submission_id);
+
+
+--
+-- Name: task task_build_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: cfbot
+--
+
+ALTER TABLE ONLY public.task
+    ADD CONSTRAINT task_build_id_fkey FOREIGN KEY (build_id) REFERENCES public.build(build_id);
 
 
 --
