@@ -38,9 +38,9 @@ SVG_CONTENT = {
       <circle cx="26" cy="26" r="25" stroke="gray" fill="none"/>
     </svg>""",
     "paused": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="20" height="20">
-      <circle cx="26" cy="26" r="25" fill="grey"/>
-      <rect x="19" y="16" width="4" height="20" fill="white"/>
-      <rect x="29" y="16" width="4" height="20" fill="white"/>
+      <circle cx="26" cy="26" r="25" stroke="grey" fill="none"/>
+      <rect x="19" y="16" width="4" height="20" fill="grey"/>
+      <rect x="29" y="16" width="4" height="20" fill="grey"/>
       </svg>""",
 }
 
