@@ -370,7 +370,11 @@ def ingest_webhook(conn, event_type, event):
                     limit 1""",
                 (commit_id,),
             )
-            commitfest_id, submission_id = cursor.fetchone()
+            if row := cursor.fetchone():
+                commitfest_id, submission_id = row
+            else:
+                # needed for master/REL_XXX
+                commitfest_id, submission_id = None, None
             cursor.execute(
                 """INSERT INTO task (task_id, build_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())
@@ -557,7 +561,11 @@ def poll_stale_build(conn, build_id):
                 """select commitfest_id, submission_id from branch where commit_id = %s order by created desc limit 1""",
                 (commit_id,),
             )
-            commitfest_id, submission_id = cursor.fetchone()
+            if row := cursor.fetchone():
+                commitfest_id, submission_id = row
+            else:
+                # needed for master/REL_XXX
+                commitfest_id, submission_id = None, None
 
             logging.info("new task %s %s", task_id, task_status)
             cursor.execute(

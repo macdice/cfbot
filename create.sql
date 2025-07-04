@@ -140,8 +140,8 @@ ALTER TABLE public.submission OWNER TO cfbot;
 --
 
 CREATE TABLE public.task (
-    commitfest_id integer NOT NULL,
-    submission_id integer NOT NULL,
+    commitfest_id integer,
+    submission_id integer,
     task_name text NOT NULL,
     commit_id text,
     status text NOT NULL,
