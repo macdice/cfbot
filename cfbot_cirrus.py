@@ -332,7 +332,7 @@ def process_new_task_status(cursor, task_id, old_task_status, task_status, sourc
 
     # maintain the history of status changes
     cursor.execute(
-        """insert into task_status_history(task_id, status, start_time, source)
+        """insert into task_status_history(task_id, status, received, source)
                       values (%s, %s, now(), %s)""",
         (task_id, task_status, source),
     )
@@ -348,7 +348,14 @@ def process_new_task_status(cursor, task_id, old_task_status, task_status, sourc
 
 # build row should be locked, must be new build or change in status
 def process_new_build_status(
-    cursor, build_id, old_build_status, build_status, commit_id, branch_name, source
+    cursor,
+    build_id,
+    old_build_status,
+    build_status,
+    commit_id,
+    branch_name,
+    source,
+    souce_time,
 ):
     # log new/changed status, update if changed
     if old_build_status:
@@ -369,7 +376,7 @@ def process_new_build_status(
 
     # maintain the history of status changes
     cursor.execute(
-        """insert into build_status_history(build_id, status, start_time, source)
+        """insert into build_status_history(build_id, status, received, source)
                       values (%s, %s, now(), %s)""",
         (build_id, build_status, source),
     )
