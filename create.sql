@@ -222,6 +222,7 @@ ALTER TABLE public.task_status_history OWNER TO cfbot;
 
 CREATE TABLE public.task_status_statistics (
     branch_name text NOT NULL,
+    task_name text NOT NULL,
     status text NOT NULL,
     avg_elapsed interval NOT NULL,
     stddev_elapsed interval NOT NULL,

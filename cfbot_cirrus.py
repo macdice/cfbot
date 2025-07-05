@@ -238,9 +238,9 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
                         LIMIT 1""",
                     (build_id, build_branch, commit_id),
                 )
-                (is_most_recent_build_id,) = cursor.fetchone()
-                if is_most_recent_build_id:
-                    is_current_build_for_branch = True
+                if row := cursor.fetchone():
+                    if row[0]:
+                        is_current_build_for_branch = True
 
         if is_current_build_for_branch:
             # Find the latest branch (push) record corresponding to the
@@ -512,7 +512,7 @@ def ingest_webhook(conn, event_type, event):
                 """select 1
                      from build
                     where build_id = %s
-                      for key share""",
+                      for update""",
                 (build_id,),
             )
             if not cursor.fetchone():
@@ -674,15 +674,16 @@ def poll_stale_build(conn, build_id):
 
         # check if we already have this task, and what its status is
         cursor.execute(
-            """SELECT status
+            """SELECT status, status != %s
                  FROM task
-                WHERE task_id = %s""",
-            (task_id,),
+                WHERE task_id = %s
+                  FOR UPDATE""",
+            (task_status, task_id),
         )
         if row := cursor.fetchone():
             # process change, if it is different
-            (old_task_status,) = row
-            if old_task_status != task_status:
+            (old_task_status, change) = row
+            if change:
                 process_new_task_status(
                     cursor, task_id, old_task_status, task_status, "poll", task_sent
                 )
@@ -813,12 +814,12 @@ def poll_stale_builds(conn):
                                           status,
                                           avg_elapsed + stddev_elapsed * 2 as elapsed_p95
                                      from build_status_statistics
-                                    where branch_name = 'master' or branch_name like 'REL_%'),
+                                    where branch_name = 'master' or branch_name like 'REL_%%'),
                            run as (select build_id,
                                           status,
                                           branch_name,
                                           case
-                                            when branch_name = 'master' or branch_name like 'REL_%'
+                                            when branch_name = 'master' or branch_name like 'REL_%%'
                                             then branch_name
                                             else 'master'
                                           end as reference_branch,
@@ -831,7 +832,8 @@ def poll_stale_builds(conn):
                              run.status,
                              extract(epoch from ref.elapsed_p95),
                              extract(epoch from run.elapsed)
-                        from run left join ref on (run.reference_branch = ref.branch_name)
+                        from run
+                   left join ref on ((run.reference_branch, run.status) = (ref.branch_name, ref.status))
                        where run.elapsed > COALESCE(elapsed_p95, interval '30 minutes')""")
     for (
         build_id,
@@ -861,8 +863,66 @@ def poll_stale_builds(conn):
         cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
 
 
+def refresh_task_status_statistics(conn):
+    cursor = conn.cursor()
+    cursor.execute(
+        """delete from task_status_history where sent < now() - interval '30 days'"""
+    )
+    cursor.execute("""delete from task_status_statistics""")
+    # XXX waiting for more data before removing hard coded 'master' from here...
+    cursor.execute("""insert into task_status_statistics
+                             (branch_name, task_name, status, avg_elapsed, stddev_elapsed, n)
+                      with elapsed as (select coalesce('master', build.branch_name) as branch_name,
+                                              task.task_name,
+                                              h.status,
+                                              lead(h.sent) over(partition by h.task_id order by h.sent) - h.sent as elapsed
+                                         from build
+                                         join task using (build_id)
+                                         join task_status_history h using (task_id)
+                                        where task.status = 'COMPLETED'
+                                      --- and (build.branch_name = 'master' or build.branch_name like 'REL_%%')
+                                        )
+                      select branch_name,
+                             task_name,
+                             status,
+                             avg(elapsed),
+                             coalesce(interval '1 second' * stddev(extract(epoch from elapsed)), interval '0 seconds') as stddev,
+                             count(elapsed) as n
+                        from elapsed
+                       where elapsed is not null
+                       group by 1, 2, 3
+                  --- having count(*) > 1""")
+
+
+def refresh_build_status_statistics(conn):
+    cursor = conn.cursor()
+    cursor.execute(
+        """delete from build_status_history where received < now() - interval '30 days'"""
+    )
+    cursor.execute("""delete from build_status_statistics""")
+    cursor.execute("""insert into build_status_statistics
+                             (branch_name, status, avg_elapsed, stddev_elapsed, n)
+                      with elapsed as (select coalesce('master', build.branch_name) as branch_name,
+                                              h.status,
+                                              lead(received) over (partition by h.build_id order by received) - received as elapsed
+                                         from build_status_history h
+                                         join build using (build_id)
+                                        where build.status = 'COMPLETED'
+                                      --- and (build.branch_name = 'master' or build.branch_name like 'REL_%%')
+                                        )
+                      select branch_name,
+                             status,
+                             avg(elapsed),
+                             coalesce(interval '1 second' * stddev(extract(epoch from elapsed)), interval '0 seconds') as stddev,
+                             count(elapsed) as n
+                        from elapsed
+                       where elapsed is not null
+                       group by 1, 2
+                  --- having count(*) > 1""")
+
+
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
-        cursor = conn.cursor()
-        poll_stale_build(conn, "4879753326362624")
+        refresh_task_status_statistics(conn)
+        refresh_build_status_statistics(conn)
         conn.commit()
