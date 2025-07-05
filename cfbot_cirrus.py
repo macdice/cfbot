@@ -104,6 +104,7 @@ def get_build(build_id):
               name
               status
               localGroupId
+              statusTimestamp
             }
           }
         }
@@ -314,7 +315,9 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
 
 
 # task row should be locked, must be a new task or change in status
-def process_new_task_status(cursor, task_id, old_task_status, task_status, source):
+def process_new_task_status(
+    cursor, task_id, old_task_status, task_status, source, sent
+):
     # log new/changed status, update if changed
     if old_task_status:
         assert old_task_status != task_status
@@ -332,9 +335,9 @@ def process_new_task_status(cursor, task_id, old_task_status, task_status, sourc
 
     # maintain the history of status changes
     cursor.execute(
-        """insert into task_status_history(task_id, status, received, source)
-                      values (%s, %s, now(), %s)""",
-        (task_id, task_status, source),
+        """insert into task_status_history(task_id, status, received, source, sent)
+                      values (%s, %s, now(), %s, to_timestamp(%s::double precision / 1000))""",
+        (task_id, task_status, source, sent),
     )
 
     # generate extra jobs depending on status
@@ -355,7 +358,6 @@ def process_new_build_status(
     commit_id,
     branch_name,
     source,
-    souce_time,
 ):
     # log new/changed status, update if changed
     if old_build_status:
@@ -503,6 +505,7 @@ def ingest_webhook(conn, event_type, event):
         task_status = event["task"]["status"]
         task_name = event["task"]["name"]
         task_position = event["task"]["localGroupId"] + 1
+        task_sent = event["task"]["statusTimestamp"]
 
         if action == "created":
             cursor.execute(
@@ -558,7 +561,9 @@ def ingest_webhook(conn, event_type, event):
                 #    cursor, "poll-stale-build", build_id
                 # )
             else:
-                process_new_task_status(cursor, task_id, None, task_status, "webhook")
+                process_new_task_status(
+                    cursor, task_id, None, task_status, "webhook", task_sent
+                )
         elif action == "updated":
             old_task_status = event["old_status"]
             cursor.execute(
@@ -583,7 +588,7 @@ def ingest_webhook(conn, event_type, event):
             elif existing_task_status == old_task_status:
                 # we have the expected old value, common case
                 process_new_task_status(
-                    cursor, task_id, old_task_status, task_status, "webhook"
+                    cursor, task_id, old_task_status, task_status, "webhook", task_sent
                 )
             else:
                 # unexpected or missing old value, fix by polling
@@ -665,6 +670,7 @@ def poll_stale_build(conn, build_id):
         task_name = task["name"]
         task_status = task["status"]
         position = task["localGroupId"] + 1
+        task_sent = task["statusTimestamp"]
 
         # check if we already have this task, and what its status is
         cursor.execute(
@@ -678,7 +684,7 @@ def poll_stale_build(conn, build_id):
             (old_task_status,) = row
             if old_task_status != task_status:
                 process_new_task_status(
-                    cursor, task_id, old_task_status, task_status, "poll"
+                    cursor, task_id, old_task_status, task_status, "poll", task_sent
                 )
         else:
             # a task we haven't heard about before
@@ -710,7 +716,9 @@ def poll_stale_build(conn, build_id):
                     task_status,
                 ),
             )
-            process_new_task_status(cursor, task_id, None, task_status, "poll")
+            process_new_task_status(
+                cursor, task_id, None, task_status, "poll", task_sent
+            )
 
             # tell the commitfest app
             if task_status in POST_TASK_STATUSES:
@@ -856,11 +864,5 @@ def poll_stale_builds(conn):
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
         cursor = conn.cursor()
-        update_branch(
-            cursor,
-            "5154156102549504",
-            "COMPLETED",
-            "c7478999ef32767fa49ab13a1d7e2a046bc9c5d8",
-            "cf/5633",
-        )
+        poll_stale_build(conn, "4879753326362624")
         conn.commit()

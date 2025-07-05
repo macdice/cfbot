@@ -106,7 +106,8 @@ ALTER TABLE public.build OWNER TO cfbot;
 CREATE TABLE public.build_status_history (
     build_id text NOT NULL,
     status text NOT NULL,
-    start_time timestamp with time zone NOT NULL
+    received timestamp with time zone NOT NULL,
+    source text
 );
 
 
@@ -207,7 +208,9 @@ ALTER TABLE public.task_command OWNER TO cfbot;
 CREATE TABLE public.task_status_history (
     task_id text NOT NULL,
     status text NOT NULL,
-    start_time timestamp with time zone NOT NULL
+    received timestamp with time zone NOT NULL,
+    source text,
+    sent timestamp with time zone
 );
 
 
