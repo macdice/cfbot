@@ -113,33 +113,35 @@ def get_build(build_id):
     return result["build"]
 
 
-# Normally all updates are triggered by webhooks carrying a build ID.  This
-# function is called periodically for branches that haven't moved in a while,
-# to paper over any lost webhooks, and eventually reach the timeout state if
-# Cirrus or a build machine has lost the plot.
+# Normally all updates are triggered by webhooks carrying a build ID, or
+# failing that, by poll_stale_builds().  But if a build machine is jammed and
+# holding up the works, or we managed to miss so many webhooks that we don't
+# even know about any build IDs that are associated with this branch, then this
+# is the cleanup of last resort, that will poll all builds associated with this
+# commit ID, and eventually trigger a timeout for the branch itself.
 def poll_stale_branch(conn, branch_id):
-    # Lock branch to keep concurrency simple
     cursor = conn.cursor()
     cursor.execute(
         """SELECT commit_id,
-                             status,
-                             created < now() - interval '1 hour' AS timeout_reached
-                        FROM branch
-                       WHERE id = %s""",
+                  status,
+                  build_id IS NULL AS no_build,
+                  created < now() - interval '1 hour' AS timeout_reached
+             FROM branch
+            WHERE id = %s""",
         (branch_id,),
     )
-    commit_id, branch_status, timeout_reached = cursor.fetchone()
+    commit_id, branch_status, no_build, timeout_reached = cursor.fetchone()
 
     if branch_status != "testing":
-        # Nothing to do.
+        # Nothing to do, it's not stale after all.
         return
     elif timeout_reached:
-        # Timeout reached, unless there has been a concurrent state change
+        # Timeout reached, unless there has been a concurrent state change.
         cursor.execute(
             """UPDATE branch
-                             SET status = 'timeout'
-                           WHERE id = %s
-                             AND status = 'testing'""",
+                  SET status = 'timeout'
+                WHERE id = %s
+                  AND status = 'testing'""",
             (branch_id,),
         )
         if cursor.rowsaffected() == 1:
@@ -147,18 +149,18 @@ def poll_stale_branch(conn, branch_id):
             cfbot_work_queue.insert_work_queue_if_not_exists(
                 cursor, "post-branch-status", branch_id
             )
-    else:
-        # Schedule a poll of every build associated with this commit ID that is
-        # not already in a final state.  This should cover problems caused by
-        # missed webhooks from Cirrus.
+    elif no_build:
+        # Schedule a poll of every build associated with this commit ID.  This
+        # covers the case of missing a lot of webhooks (eg if cfbot is down for
+        # a while), so that we don't know about any builds associated with this
+        # branch.
         builds = get_builds_for_commit(
             cfbot_config.CIRRUS_USER, cfbot_config.CIRRUS_REPO, commit_id
         )
         # logging.info("builds for commit ID %s: %s", commit_id, builds)
         for build in builds:
             build_id = build["id"]
-            build_status = build["status"]
-            # if build_status not in FINAL_BUILD_STATUSES:
+            # XXX filter by branch name?
             cfbot_work_queue.insert_work_queue_if_not_exists(
                 cursor, "poll-stale-build", build_id
             )
@@ -482,6 +484,8 @@ def ingest_webhook(conn, event_type, event):
                 cfbot_work_queue.insert_work_queue_if_not_exists(
                     cursor, "poll-stale-build", build_id
                 )
+
+        # on every build update, we might also update the branch
         update_branch(cursor, build_id, build_status, commit_id, build_branch)
     elif event_type == "task":
         task_id = event["task"]["id"]
@@ -612,7 +616,6 @@ def poll_stale_build(conn, build_id):
     build = get_build(build_id)
     logging.info("Cirrus: %s", build)
 
-    # If unknown to Cirrus (?!), then we're done.
     if not build:
         logging.info(
             "Cirrus does not know build %s, existing status %s",
@@ -642,13 +645,6 @@ def poll_stale_build(conn, build_id):
     build_status = build["status"]
     build_branch = build["branch"]
     tasks = build["tasks"]
-
-    # Update the modified time if the status changed.  This also sets
-    # the commit_id and branch_name due to our strange protocol above...
-    if old_build_status != build_status:
-        process_new_build_status(
-            cursor, build_id, old_build_status, build_status, commit_id, build_branch
-        )
 
     # Upsert the tasks.
     for task in tasks:
@@ -707,6 +703,14 @@ def poll_stale_build(conn, build_id):
                     cursor, "post-task-status", task_id
                 )
 
+    # Process branch changes.  This also sets the commit_id and branch_name due
+    # to our strange protocol above...
+    if old_build_status != build_status:
+        process_new_build_status(
+            cursor, build_id, old_build_status, build_status, commit_id, build_branch
+        )
+
+    # maybe update the branch too
     update_branch(cursor, build_id, build_status, commit_id, build_branch)
 
 
@@ -716,13 +720,12 @@ def poll_stale_build(conn, build_id):
 # because they seem to be stuck in 'testing' and not moving.
 def poll_stale_branches(conn):
     cursor = conn.cursor()
-    cursor.execute("""SELECT branch.id, MAX(task.modified)
+    cursor.execute("""SELECT id
                         FROM branch
-                   LEFT JOIN task ON (branch.commit_id = task.commit_id)
-                       WHERE branch.status = 'testing'
-                       GROUP BY 1
-                      HAVING MAX(task.modified) IS NULL OR MAX(task.modified) < now() - interval '5 minutes'""")
-    for branch_id, last_modified in cursor.fetchall():
+                       WHERE status = 'testing'
+                         AND build_id IS NULL
+                         AND created < now() - interval '5 minutes'""")
+    for (branch_id,) in cursor.fetchall():
         cfbot_work_queue.insert_work_queue_if_not_exists(
             cursor, "poll-stale-branch", branch_id
         )
@@ -767,123 +770,70 @@ def backfill_task_command(conn):
 
 
 def poll_stale_builds(conn):
-    with cfbot_util.db() as conn:
-        cursor = conn.cursor()
+    cursor = conn.cursor()
 
-        # Compute the elapsed time of 95% of all completed master/release
-        # branch builds in recent time, and use that as a reference to decide
-        # when it's time to start polling a build because it looks like it's
-        # taking too long and we might have missed some updates.
-        #
-        # This policy is quite conservative, but we don't want to poll too
-        # often, or Cirrus might not like us, and 2 sigma should in theory only
-        # have to poll for 5% of branches spuriously...
-        #
-        # This relies on data being periodically summarised into
-        # build_status_statistics by a cronjob.
-        cursor.execute("""with ref as (select branch_name,
-                                              status,
-                                              avg_elapsed + stddev_elapsed * 2 as elapsed_p95
-                                         from build_status_statistics
-                                        where branch_name = 'master' or branch_name like 'REL_%'),
-                               run as (select build_id,
-                                              status,
-                                              branch_name,
-                                              case
-                                                when branch_name = 'master' or branch_name like 'REL_%'
-                                                then branch_name
-                                                else 'master'
-                                              end as reference_branch,
-                                              now() - created as elapsed
-                                         from build
-                                        where build.status not in ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED', 'DELETED'))
-                          select run.build_id,
-                                 run.reference_branch,
-                                 run.branch_name,
-                                 run.status,
-                                 extract(epoch from ref.elapsed_p95),
-                                 extract(epoch from run.elapsed)
-                            from run left join ref on (run.reference_branch = ref.branch_name)
-                           where run.elapsed > COALESCE(elapsed_p95, interval '30 minutes')""")
-        for (
-            build_id,
-            reference_branch,
-            branch_name,
-            build_status,
-            elapsed_p95,
-            elapsed,
-        ) in cursor.fetchall():
-            if elapsed_p95 == None:
-                # no reference data available, it's just "a really long time"
-                print(
-                    "build %s still has status %s after %.2fs"
-                    "" % (build_id, build_status, elapsed)
+    # Compute the elapsed time of 95% of all completed master/release
+    # branch builds in recent time, and use that as a reference to decide
+    # when it's time to start polling a build because it looks like it's
+    # taking too long and we might have missed some updates.
+    #
+    # This policy is quite conservative, but we don't want to poll too
+    # often, or Cirrus might not like us, and 2 sigma should in theory only
+    # have to poll for 5% of branches spuriously...
+    cursor.execute("""with ref as (select branch_name,
+                                          status,
+                                          avg_elapsed + stddev_elapsed * 2 as elapsed_p95
+                                     from build_status_statistics
+                                    where branch_name = 'master' or branch_name like 'REL_%'),
+                           run as (select build_id,
+                                          status,
+                                          branch_name,
+                                          case
+                                            when branch_name = 'master' or branch_name like 'REL_%'
+                                            then branch_name
+                                            else 'master'
+                                          end as reference_branch,
+                                          now() - created as elapsed
+                                     from build
+                                    where build.status not in ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED', 'DELETED'))
+                      select run.build_id,
+                             run.reference_branch,
+                             run.branch_name,
+                             run.status,
+                             extract(epoch from ref.elapsed_p95),
+                             extract(epoch from run.elapsed)
+                        from run left join ref on (run.reference_branch = ref.branch_name)
+                       where run.elapsed > COALESCE(elapsed_p95, interval '30 minutes')""")
+    for (
+        build_id,
+        reference_branch,
+        branch_name,
+        build_status,
+        elapsed_p95,
+        elapsed,
+    ) in cursor.fetchall():
+        if elapsed_p95 == None:
+            # no reference data available, it's just "a really long time"
+            print(
+                "build %s still has status %s after %.2fs"
+                "" % (build_id, build_status, elapsed)
+            )
+        else:
+            print(
+                "build %s still has status %s after %.2fs, longer than %.2fs which was enough for 95%% of recent COMPLETED builds on reference branch %s"
+                ""
+                % (
+                    build_id,
+                    build_status,
+                    float(elapsed),
+                    float(elapsed_p95),
+                    reference_branch,
                 )
-            else:
-                print(
-                    "build %s still has status %s after %.2fs, longer than %.2fs which was enough for 95%% of recent COMPLETED builds on reference branch %s"
-                    ""
-                    % (
-                        build_id,
-                        build_status,
-                        float(elapsed),
-                        float(elapsed_p95),
-                        reference_branch,
-                    )
-                )
-            cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
+            )
+        cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
 
 
 if __name__ == "__main__":
-    #  print(get_commands_for_task('5646021133336576'))
-    #   print(get_artifacts_for_task('5636792221696000'))
     with cfbot_util.db() as conn:
         poll_stale_builds(conn)
-        # poll_stale_branches(conn)
-        # poll_stale_branch(conn, 201003)
-        # poll_build(conn, 6247778155757568)
-        # poll_stale_build(conn, "5962629472059392")
-        # poll_stale_build(conn, "4947872984072192")
-        # ingest_webhook(
-        #    conn,
-        #    "task",
-        #    {
-        #        "old_status": "CREATED",
-        #        "action": "updated",
-        #        "repository": {
-        #            "id": 5309429912436736,
-        #            "owner": "postgresql-cfbot",
-        #            "name": "postgresql",
-        #            "isPrivate": False,
-        #        },
-        #        "build": {
-        #            "id": 5275791488974848,
-        #            "branch": "cf/4966",
-        #            "changeIdInRepo": "1393f0d2323b1c6c92961b66e7228ab649d8cae7",
-        #            "changeTimestamp": 1751414782000,
-        #            "changeMessageTitle": "[CF 4966] v1 - Parallel CREATE INDEX for GIN indexes",
-        #            "status": "EXECUTING",
-        #            "user": {"id": 5349278619009024, "username": "postgresql-cfbot"},
-        #        },
-        #        "task": {
-        #            "id": 5585849976356864,
-        #            "name": "SanityCheck",
-        #            "status": "TRIGGERED",
-        #            "statusTimestamp": 1751414793117,
-        #            "creationTimestamp": 1751414792338,
-        #            "durationInSeconds": 0,
-        #            "uniqueLabels": [],
-        #            "localGroupId": 0,
-        #            "automaticReRun": False,
-        #            "manualRerunCount": 0,
-        #            "automaticallyReRunnable": False,
-        #            "instanceType": "GCEInstance",
-        #            "notifications": [],
-        #        },
-        #    },
-        # )
         conn.commit()
-        # poll_branch_for_commit_id(conn, "78526a6b703ed7a8efed9762692ef48ef32ccd8e")
-#    backfill_task_command(conn)
-#    backfill_task_command(conn)
-#    pull_build_results(conn)
