@@ -54,7 +54,8 @@ CREATE TABLE public.branch (
     first_additions integer,
     first_deletions integer,
     all_additions integer,
-    all_deletions integer
+    all_deletions integer,
+    build_id text
 );
 
 
@@ -370,6 +371,14 @@ CREATE INDEX task_submission_id_idx ON public.task USING btree (submission_id);
 --
 
 CREATE INDEX work_queue_type_key_idx ON public.work_queue USING btree (type, key) WHERE (status = 'NEW'::text);
+
+
+--
+-- Name: branch branch_build_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: cfbot
+--
+
+ALTER TABLE ONLY public.branch
+    ADD CONSTRAINT branch_build_id_fkey FOREIGN KEY (build_id) REFERENCES public.build(build_id);
 
 
 --

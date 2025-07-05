@@ -5,6 +5,7 @@ import cfbot_work_queue
 
 import json
 import logging
+import re
 import requests
 
 # https://github.com/cirruslabs/cirrus-ci-web/blob/master/schema.gql
@@ -163,39 +164,6 @@ def poll_stale_branch(conn, branch_id):
             )
 
 
-def maybe_change_branch_status(cursor, build_id, build_status, commit_id):
-    # If a build has reached a final state, then find any branches that have
-    # this commit ID (usually just one), and if this is the most recent build
-    # created for that branch then it determines the state of the branch.
-    #
-    # Shared by ingest_webhook() and poll_branch().
-    if build_status in FINAL_BUILD_STATUSES:
-        # XXX wish i'd just used these statuses directly here...
-        if build_status == "COMPLETED":
-            branch_status = "finished"
-        else:
-            branch_status = "failed"
-        cursor.execute(
-            """UPDATE branch
-                             SET status = %s
-                           WHERE commit_id = %s
-                             AND status = 'testing'
-                             AND (SELECT build_id
-                                    FROM build
-                                   WHERE build.commit_id = %s
-                                     AND build.branch_name LIKE '%%/' || branch.submission_id
-                                ORDER BY build.created
-                                   LIMIT 1) = %s
-                       RETURNING id""",
-            (branch_status, commit_id, commit_id, build_id),
-        )
-        for (branch_id,) in cursor.fetchall():
-            logging.info("branch %s testing -> %s", branch_id, branch_status)
-            cfbot_work_queue.insert_work_queue_if_not_exists(
-                cursor, "post-branch-status", branch_id
-            )
-
-
 # Handler for "fetch-task-commands", a job enqueued once a task reaches a final
 # state.
 def fetch_task_commands(conn, task_id):
@@ -227,6 +195,120 @@ def fetch_task_commands(conn, task_id):
 
 
 PRE_EXECUTING_STATUSUS = ("CREATED", "TRIGGERED", "SCHEDULED")
+
+
+# We track the "current" build for each cfbot-managed branch.  The current
+# branch is the one that is still in progress, or otherwise the latest one.
+# Called by both poll_stale_branch() and ingest_webhook().
+def update_branch(cursor, build_id, build_status, commit_id, build_branch):
+    # if this is a cfbot managed branch, see if this build should now become
+    # the current build for the branch
+    if groups := re.match(r"cf/([0-9]+)", build_branch):
+        # XXX it is a bit weird that we are parsing the branch name like this,
+        # but matching by commit_id alone can lead to confusion in theory;
+        # maybe add branch name to branch table?
+        submission_id = groups.group(1)
+        is_current_build_for_branch = False
+        if build_status not in FINAL_BUILD_STATUSES:
+            # if it's still in progress, then it is
+            is_current_build_for_branch = True
+        else:
+            # if there is some other build still in progress, then it isn't
+            cursor.execute(
+                """SELECT 1
+                     FROM build
+                    WHERE branch_name = %s
+                      AND commit_id = %s
+                      AND build_id != %s
+                      AND status NOT IN ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED')""",
+                (build_branch, commit_id, build_id),
+            )
+            if not cursor.fetchone():
+                # if this is the most recently created build on this branch, then it is
+                # XXX should we be using Cirrus's creation times, not our own?
+                cursor.execute(
+                    """SELECT build_id
+                         FROM build
+                        WHERE branch_name = %s
+                          AND commit_id = %s
+                     ORDER BY created DESC
+                        LIMIT 1""",
+                    (build_branch, commit_id),
+                )
+                (most_recent_build_id,) = cursor.fetchone()
+                if most_recent_build_id == build_id:
+                    is_current_build_for_branch = True
+
+        if is_current_build_for_branch:
+            # Find the latest branch (push) record corresponding to the
+            # subnmission (should probably be branch_name), and prepare to
+            # merge details from this build into it.
+            cursor.execute(
+                """SELECT id, build_id, status
+                     FROM branch
+                    WHERE submission_id = %s
+                      AND commit_id = %s
+                 ORDER BY created
+                      FOR UPDATE
+                    LIMIT 1""",
+                (submission_id, commit_id),
+            )
+            branch_id, old_build_id, old_branch_status = cursor.fetchone()
+            branch_modified = False
+
+            # If it wasn't tracking this build ID, update it.
+            if old_build_id != build_id:
+                branch_modified = True
+                cursor.execute(
+                    """UPDATE branch
+                          SET build_id = %s,
+                              modified = now()
+                        WHERE id = %s""",
+                    (build_id, branch_id),
+                )
+                logging.info(
+                    "branch %s active build %s -> %s", branch_id, old_build_id, build_id
+                )
+
+            # The current build's status determines the branch's status.
+            # The only status we won't overwrite is "timeout", which means
+            # we've decided the branch is dead (we won't poll it, and it won't
+            # be counted against the concurrent limit).  We can still receive
+            # updates about it, though.
+            #
+            # XXX Perhaps we should be willing to un-time-out if the build
+            # changed?
+            #
+            # XXX our internal branch status names could be tidier, but cfapp
+            # knows about them so can't change them without coordinating the
+            # rollout
+            if old_branch_status != "timeout":
+                if build_status in FINAL_BUILD_STATUSES:
+                    if build_status == "COMPLETED":
+                        branch_status = "finished"
+                    else:
+                        branch_status = "failed"
+                else:
+                    branch_status = "testing"
+                if old_branch_status != branch_status:
+                    branch_modified = True
+                    cursor.execute(
+                        """UPDATE branch
+                              SET status = %s
+                            WHERE id = %s""",
+                        (branch_status, branch_id),
+                    )
+                    logging.info(
+                        "branch %s %s -> %s",
+                        branch_id,
+                        old_branch_status,
+                        branch_status,
+                    )
+
+            if branch_modified:
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "post-branch-status", branch_id
+                )
 
 
 # Called by cfbot_api.py's /api/cirrus-webhook endpoint with a message described at:
@@ -336,7 +418,7 @@ def ingest_webhook(conn, event_type, event):
                 cfbot_work_queue.insert_work_queue_if_not_exists(
                     cursor, "poll-stale-build", build_id
                 )
-        maybe_change_branch_status(cursor, build_id, build_status, commit_id)
+        update_branch(cursor, build_id, build_status, commit_id, build_branch)
     elif event_type == "task":
         task_id = event["task"]["id"]
         task_status = event["task"]["status"]
@@ -495,7 +577,7 @@ def poll_stale_build(conn, build_id):
 
     commit_id = build["changeIdInRepo"]
     build_status = build["status"]
-    branch_name = build["branch"]
+    build_branch = build["branch"]
     tasks = build["tasks"]
 
     # Update the modified time if the status changed.  This also sets
@@ -508,7 +590,7 @@ def poll_stale_build(conn, build_id):
                                  commit_id = %s,
                                  modified = now()
                            WHERE build_id = %s""",
-            (build_status, branch_name, commit_id, build_id),
+            (build_status, build_branch, commit_id, build_id),
         )
 
     # Upsert the tasks.
@@ -595,7 +677,7 @@ def poll_stale_build(conn, build_id):
         else:
             logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
 
-    maybe_change_branch_status(cursor, build_id, build_status, commit_id)
+    update_branch(cursor, build_id, build_status, commit_id, build_branch)
 
 
 # Handler for "poll-stale-branches".
@@ -661,44 +743,45 @@ if __name__ == "__main__":
         # poll_stale_branches(conn)
         # poll_stale_branch(conn, 201003)
         # poll_build(conn, 6247778155757568)
-        ingest_webhook(
-            conn,
-            "task",
-            {
-                "old_status": "CREATED",
-                "action": "updated",
-                "repository": {
-                    "id": 5309429912436736,
-                    "owner": "postgresql-cfbot",
-                    "name": "postgresql",
-                    "isPrivate": False,
-                },
-                "build": {
-                    "id": 5275791488974848,
-                    "branch": "cf/4966",
-                    "changeIdInRepo": "1393f0d2323b1c6c92961b66e7228ab649d8cae7",
-                    "changeTimestamp": 1751414782000,
-                    "changeMessageTitle": "[CF 4966] v1 - Parallel CREATE INDEX for GIN indexes",
-                    "status": "EXECUTING",
-                    "user": {"id": 5349278619009024, "username": "postgresql-cfbot"},
-                },
-                "task": {
-                    "id": 5585849976356864,
-                    "name": "SanityCheck",
-                    "status": "TRIGGERED",
-                    "statusTimestamp": 1751414793117,
-                    "creationTimestamp": 1751414792338,
-                    "durationInSeconds": 0,
-                    "uniqueLabels": [],
-                    "localGroupId": 0,
-                    "automaticReRun": False,
-                    "manualRerunCount": 0,
-                    "automaticallyReRunnable": False,
-                    "instanceType": "GCEInstance",
-                    "notifications": [],
-                },
-            },
-        )
+        poll_stale_build(conn, "5471750814695424")
+        # ingest_webhook(
+        #    conn,
+        #    "task",
+        #    {
+        #        "old_status": "CREATED",
+        #        "action": "updated",
+        #        "repository": {
+        #            "id": 5309429912436736,
+        #            "owner": "postgresql-cfbot",
+        #            "name": "postgresql",
+        #            "isPrivate": False,
+        #        },
+        #        "build": {
+        #            "id": 5275791488974848,
+        #            "branch": "cf/4966",
+        #            "changeIdInRepo": "1393f0d2323b1c6c92961b66e7228ab649d8cae7",
+        #            "changeTimestamp": 1751414782000,
+        #            "changeMessageTitle": "[CF 4966] v1 - Parallel CREATE INDEX for GIN indexes",
+        #            "status": "EXECUTING",
+        #            "user": {"id": 5349278619009024, "username": "postgresql-cfbot"},
+        #        },
+        #        "task": {
+        #            "id": 5585849976356864,
+        #            "name": "SanityCheck",
+        #            "status": "TRIGGERED",
+        #            "statusTimestamp": 1751414793117,
+        #            "creationTimestamp": 1751414792338,
+        #            "durationInSeconds": 0,
+        #            "uniqueLabels": [],
+        #            "localGroupId": 0,
+        #            "automaticReRun": False,
+        #            "manualRerunCount": 0,
+        #            "automaticallyReRunnable": False,
+        #            "instanceType": "GCEInstance",
+        #            "notifications": [],
+        #        },
+        #    },
+        # )
         conn.commit()
         # poll_branch_for_commit_id(conn, "78526a6b703ed7a8efed9762692ef48ef32ccd8e")
 #    backfill_task_command(conn)

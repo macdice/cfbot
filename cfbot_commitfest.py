@@ -109,40 +109,52 @@ def pull_modified_threads(conn):
         conn.commit()
 
 
-def make_branch_status_message(conn, branch_id=None, commit_id=None):
-    assert branch_id or commit_id
+def make_branch_status_message(conn, branch_id=None, build_id=None, commit_id=None):
+    assert branch_id or commit_id or build_id
 
-    filter_column = "id" if branch_id else "commit_id"
+    if branch_id:
+        filter_column = "id"
+    elif build_id:
+        filter_column = "build_id"
+    elif commit_id:
+        filter_column = "commit_id"
 
     cursor = conn.cursor()
     cursor.execute(
-        f"""SELECT id, commit_id, submission_id, url, status, created, modified,
+        f"""SELECT id, build_id, commit_id, submission_id, url, status, created, modified,
                             version, patch_count,
                             first_additions, first_deletions,
                             all_additions, all_deletions
                       FROM branch
                      WHERE {filter_column} = %s""",
-        (branch_id or commit_id,),
+        (branch_id or build_id or commit_id,),
     )
-    (
-        branch_id,
-        commit_id,
-        submission_id,
-        url,
-        status,
-        created,
-        modified,
-        version,
-        patch_count,
-        first_additions,
-        first_deletions,
-        all_additions,
-        all_deletions,
-    ) = cursor.fetchone()
+    if row := cursor.fetchone():
+        (
+            branch_id,
+            build_id,
+            commit_id,
+            submission_id,
+            url,
+            status,
+            created,
+            modified,
+            version,
+            patch_count,
+            first_additions,
+            first_deletions,
+            all_additions,
+            all_deletions,
+        ) = row
+    else:
+        # for postgres/postgres webhooks, we won't find a branch.  the cfapp
+        # doesn't want to hear about those anyway, so we'll skip them
+        return None
     message = {
         "submission_id": submission_id,
         "branch_name": "cf/%d" % submission_id,
         "branch_id": branch_id,
+        "build_id": build_id,
         "commit_id": commit_id,
         "apply_url": url,
         "status": status,
@@ -161,13 +173,16 @@ def make_branch_status_message(conn, branch_id=None, commit_id=None):
 def make_task_status_message(conn, task_id):
     cursor = conn.cursor()
     cursor.execute(
-        """SELECT commit_id, task_name, position, status, created, modified
+        """SELECT build_id, commit_id, task_name, position, status, created, modified
                       FROM task
                      WHERE task_id = %s""",
         (task_id,),
     )
-    commit_id, task_name, position, status, created, modified = cursor.fetchone()
+    build_id, commit_id, task_name, position, status, created, modified = (
+        cursor.fetchone()
+    )
     message = {
+        "build_id": build_id,
         "task_id": task_id,
         "commit_id": commit_id,
         "task_name": task_name,
@@ -182,7 +197,16 @@ def make_task_status_message(conn, task_id):
 def make_task_update_message(conn, task_id):
     task_status = make_task_status_message(conn, task_id)
 
-    branch_status = make_branch_status_message(conn, commit_id=task_status["commit_id"])
+    branch_status = make_branch_status_message(conn, build_id=task_status["build_id"])
+    if not branch_status:
+        logging.info(
+            "task %s build %s is not from a branch that is interesting for the cfapp, skipping",
+            task_id,
+            task_status["build_id"],
+        )
+        # branch row not found, expected for postgres/postgres (master,
+        # REL_...) branches
+        return None
     message = {
         "shared_secret": cfbot_config.COMMITFEST_SHARED_SECRET,
         "task_status": task_status,
@@ -212,7 +236,8 @@ def post_branch_status(conn, branch_id):
 # Handler for "post-task-status" work_queue jobs.
 def post_task_status(conn, task_id):
     message = make_task_update_message(conn, task_id)
-
+    if not message:
+        return
     if cfbot_config.COMMITFEST_POST_URL:
         cfbot_util.post(cfbot_config.COMMITFEST_POST_URL, message)
     else:
@@ -221,4 +246,4 @@ def post_task_status(conn, task_id):
 
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
-        post_task_status(conn, "5798872931368960")
+        post_task_status(conn, "5200442562445312")
