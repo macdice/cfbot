@@ -100,6 +100,34 @@ CREATE TABLE public.build (
 ALTER TABLE public.build OWNER TO cfbot;
 
 --
+-- Name: build_status_history; Type: TABLE; Schema: public; Owner: cfbot
+--
+
+CREATE TABLE public.build_status_history (
+    build_id text NOT NULL,
+    status text NOT NULL,
+    start_time timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.build_status_history OWNER TO cfbot;
+
+--
+-- Name: build_status_statistics; Type: TABLE; Schema: public; Owner: cfbot
+--
+
+CREATE TABLE public.build_status_statistics (
+    branch_name text NOT NULL,
+    status text NOT NULL,
+    avg_elapsed interval NOT NULL,
+    stddev_elapsed interval NOT NULL,
+    n integer NOT NULL
+);
+
+
+ALTER TABLE public.build_status_statistics OWNER TO cfbot;
+
+--
 -- Name: highlight; Type: TABLE; Schema: public; Owner: cfbot
 --
 
@@ -171,6 +199,34 @@ CREATE TABLE public.task_command (
 
 
 ALTER TABLE public.task_command OWNER TO cfbot;
+
+--
+-- Name: task_status_history; Type: TABLE; Schema: public; Owner: cfbot
+--
+
+CREATE TABLE public.task_status_history (
+    task_id text NOT NULL,
+    status text NOT NULL,
+    start_time timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.task_status_history OWNER TO cfbot;
+
+--
+-- Name: task_status_statistics; Type: TABLE; Schema: public; Owner: cfbot
+--
+
+CREATE TABLE public.task_status_statistics (
+    branch_name text NOT NULL,
+    status text NOT NULL,
+    avg_elapsed interval NOT NULL,
+    stddev_elapsed interval NOT NULL,
+    n integer NOT NULL
+);
+
+
+ALTER TABLE public.task_status_statistics OWNER TO cfbot;
 
 --
 -- Name: test; Type: TABLE; Schema: public; Owner: cfbot
@@ -398,11 +454,27 @@ ALTER TABLE ONLY public.task
 
 
 --
+-- Name: build_status_history build_status_history_build_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: cfbot
+--
+
+ALTER TABLE ONLY public.build_status_history
+    ADD CONSTRAINT build_status_history_build_id_fkey FOREIGN KEY (build_id) REFERENCES public.build(build_id);
+
+
+--
 -- Name: task task_build_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: cfbot
 --
 
 ALTER TABLE ONLY public.task
     ADD CONSTRAINT task_build_id_fkey FOREIGN KEY (build_id) REFERENCES public.build(build_id);
+
+
+--
+-- Name: task_status_history task_status_history_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: cfbot
+--
+
+ALTER TABLE ONLY public.task_status_history
+    ADD CONSTRAINT task_status_history_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.task(task_id);
 
 
 --

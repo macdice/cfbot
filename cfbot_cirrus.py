@@ -311,6 +311,68 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
                 )
 
 
+# task row should be locked, must be a new task or change in status
+def process_new_task_status(cursor, task_id, old_task_status, task_status):
+    # log new/changed status, update if changed
+    if old_task_status:
+        assert old_task_status != task_status
+        logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
+        cursor.execute(
+            """update task
+                             set status = %s,
+                                 modified = now()
+                           where task_id = %s""",
+            (task_status, task_id),
+        )
+    else:
+        logging.info("new task %s %s", task_id, task_status)
+        # caller inserted task
+
+    # maintain the history of status changes
+    cursor.execute(
+        """insert into task_status_history(task_id, status, start_time)
+                      values (%s, %s, now())""",
+        (task_id, task_status),
+    )
+
+    # generate extra jobs depending on status
+    if task_status in POST_TASK_STATUSES:
+        cfbot_work_queue.insert_work_queue_if_not_exists(
+            cursor, "post-task-status", task_id
+        )
+    if task_status in FINAL_TASK_STATUSES:
+        cfbot_work_queue.insert_work_queue(cursor, "fetch-task-commands", task_id)
+
+
+# build row should be locked, must be new build or change in status
+def process_new_build_status(
+    cursor, build_id, old_build_status, build_status, commit_id, branch_name
+):
+    # log new/changed status, update if changed
+    if old_build_status:
+        assert old_build_status != build_status
+        logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
+        cursor.execute(
+            """update build
+                             set status = %s,
+                                 commit_id = coalesce(commit_id, %s),
+                                 branch_name = coalesce(branch_name, %s),
+                                 modified = now()
+                           where build_id = %s""",
+            (build_status, commit_id, branch_name, build_id),
+        )
+    else:
+        logging.info("new build %s %s", build_id, build_status)
+        # caller inserted build
+
+    # maintain the history of status changes
+    cursor.execute(
+        """insert into build_status_history(build_id, status, start_time)
+                      values (%s, %s, now())""",
+        (build_id, build_status),
+    )
+
+
 # Called by cfbot_api.py's /api/cirrus-webhook endpoint with a message described at:
 #
 # https://cirrus-ci.org/api/#builds-and-tasks-webhooks
@@ -342,7 +404,9 @@ def ingest_webhook(conn, event_type, event):
                     "webhook out of sync, created build %s instead of updating",
                     build_id,
                 )
-            logging.info("new build %s %s", build_id, build_status)
+            process_new_build_status(
+                cursor, build_id, None, build_status, commit_id, build_branch
+            )
         elif action == "created":
             logging.info(
                 "webhook out of sync, build %s already exists, ignoring", build_id
@@ -378,15 +442,13 @@ def ingest_webhook(conn, event_type, event):
                         existing_build_status,
                         build_status,
                     )
-                cursor.execute(
-                    """UPDATE build
-                          SET status = %s,
-                              modified = now()
-                        WHERE build_id = %s""",
-                    (build_status, build_id),
-                )
-                logging.info(
-                    "build %s %s -> %s", build_id, existing_build_status, build_status
+                process_new_build_status(
+                    cursor,
+                    build_id,
+                    existing_build_status,
+                    build_status,
+                    commit_id,
+                    build_branch,
                 )
             else:
                 logging.info(
@@ -400,6 +462,8 @@ def ingest_webhook(conn, event_type, event):
                 )
                 return
         if build_status in FINAL_BUILD_STATUSES:
+            # We perform this sanity check only in the webhook case, not in the polling case,
+            # since the latter could loop forever if Cirrus actually has inconsistent data!
             cursor.execute(
                 """SELECT COUNT(*)
                                 FROM task
@@ -478,15 +542,15 @@ def ingest_webhook(conn, event_type, event):
                 # cfbot_work_queue.insert_work_queue_if_not_exists(
                 #    cursor, "poll-stale-build", build_id
                 # )
-                return
-            logging.info("new task %s %s", task_id, task_status)
+            else:
+                process_new_task_status(cursor, task_id, None, task_status)
         elif action == "updated":
             old_task_status = event["old_status"]
             cursor.execute(
                 """select status
-                                from task
-                               where task_id = %s
-                                 for update""",
+                     from task
+                    where task_id = %s
+                      for update""",
                 (task_id,),
             )
             if row := cursor.fetchone():
@@ -501,18 +565,11 @@ def ingest_webhook(conn, event_type, event):
                     task_id,
                     task_status,
                 )
-                return
             elif existing_task_status == old_task_status:
-                # common case, only one that doesn't return
-                cursor.execute(
-                    """update task
-                          set status = %s,
-                              modified = now()
-                        where task_id = %s""",
-                    (task_status, task_id),
-                )
+                # we have the expected old value, common case
+                process_new_task_status(cursor, task_id, old_task_status, task_status)
             else:
-                # unexpected value, fix by polling
+                # unexpected or missing old value, fix by polling
                 logging.info(
                     "webhook out of sync: task %s has status %s, expected %s",
                     task_id,
@@ -522,14 +579,6 @@ def ingest_webhook(conn, event_type, event):
                 cfbot_work_queue.insert_work_queue_if_not_exists(
                     cursor, "poll-stale-build", build_id
                 )
-                return
-            logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
-        if task_status in POST_TASK_STATUSES:
-            cfbot_work_queue.insert_work_queue_if_not_exists(
-                cursor, "post-task-status", task_id
-            )
-        if task_status in FINAL_TASK_STATUSES:
-            cfbot_work_queue.insert_work_queue(cursor, "fetch-task-commands", task_id)
 
 
 # Handler for "poll-stale-build" jobs.
@@ -561,18 +610,32 @@ def poll_stale_build(conn, build_id):
 
     # Network API call (regrettably while holding a lock...)
     build = get_build(build_id)
-    # logging.info("Cirrus: %s", build)
+    logging.info("Cirrus: %s", build)
 
-    # If unknown to Cirrus (?!), then we're done, but we make sure we don't
-    # leave our weird NULL record behind for other transactions to see.
+    # If unknown to Cirrus (?!), then we're done.
     if not build:
-        logging.info("Cirrus does not know build %s", build_id)
-        cursor.execute(
-            """DELETE FROM build
-                           WHERE build_id = %s
-                             AND status IS NULL""",
-            (build_id,),
+        logging.info(
+            "Cirrus does not know build %s, existing status %s",
+            build_id,
+            old_build_status,
         )
+        if old_build_status == None:
+            # Make sure we don't leave our weird NULL record behind for other
+            # transactions to see.
+            cursor.execute(
+                """DELETE FROM build
+                    WHERE build_id = %s
+                      AND status IS NULL""",
+                (build_id,),
+            )
+        elif old_build_status in ("CREATED", "SCHEDULED", "TRIGGERED"):
+            # XXX It seems that Cirrus brings builds up to TRIGGERED status and
+            # then deletes them (?), if it finds there is no .cirrus.yml file
+            # in a branch.  We'll set the status to our own made-up status, to
+            # prevent futher polling...
+            process_new_build_status(
+                cursor, build_id, old_build_status, "DELETED", None, None
+            )
         return
 
     commit_id = build["changeIdInRepo"]
@@ -581,16 +644,10 @@ def poll_stale_build(conn, build_id):
     tasks = build["tasks"]
 
     # Update the modified time if the status changed.  This also sets
-    # branch_name if we didn't have it before.
+    # the commit_id and branch_name due to our strange protocol above...
     if old_build_status != build_status:
-        cursor.execute(
-            """UPDATE build
-                             SET status = %s,
-                                 branch_name = %s,
-                                 commit_id = %s,
-                                 modified = now()
-                           WHERE build_id = %s""",
-            (build_status, build_branch, commit_id, build_id),
+        process_new_build_status(
+            cursor, build_id, old_build_status, build_status, commit_id, build_branch
         )
 
     # Upsert the tasks.
@@ -608,32 +665,10 @@ def poll_stale_build(conn, build_id):
             (task_id,),
         )
         if row := cursor.fetchone():
-            # only update if status changes, so we can use the modified time
+            # process change, if it is different
             (old_task_status,) = row
             if old_task_status != task_status:
-                logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
-                cursor.execute(
-                    """UPDATE task
-                          SET status = %s,
-                              build_id = %s,
-                              modified = now()
-                        WHERE task_id = %s""",
-                    (task_status, build_id, task_id),
-                )
-
-                # if we reached a final state, then it is time to pull down the
-                # artifacts (without bodies) and task commands (steps), which
-                # will trigger further work
-                if task_status in FINAL_TASK_STATUSES:
-                    cfbot_work_queue.insert_work_queue(
-                        cursor, "fetch-task-commands", task_id
-                    )
-
-                # tell the commitfest app
-                if task_status in POST_TASK_STATUSES:
-                    cfbot_work_queue.insert_work_queue_if_not_exists(
-                        cursor, "post-task-status", task_id
-                    )
+                process_new_task_status(cursor, task_id, old_task_status, task_status)
         else:
             # a task we haven't heard about before
 
@@ -664,18 +699,13 @@ def poll_stale_build(conn, build_id):
                     task_status,
                 ),
             )
+            process_new_task_status(cursor, task_id, None, task_status)
 
             # tell the commitfest app
             if task_status in POST_TASK_STATUSES:
                 cfbot_work_queue.insert_work_queue_if_not_exists(
                     cursor, "post-task-status", task_id
                 )
-
-    if old_build_status != build_status:
-        if inserted:
-            logging.info("new build %s %s", build_id, build_status)
-        else:
-            logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
 
     update_branch(cursor, build_id, build_status, commit_id, build_branch)
 
@@ -736,14 +766,84 @@ def backfill_task_command(conn):
         conn.commit()
 
 
+def poll_stale_builds(conn):
+    with cfbot_util.db() as conn:
+        cursor = conn.cursor()
+
+        # Compute the elapsed time of 95% of all completed master/release
+        # branch builds in recent time, and use that as a reference to decide
+        # when it's time to start polling a build because it looks like it's
+        # taking too long and we might have missed some updates.
+        #
+        # This policy is quite conservative, but we don't want to poll too
+        # often, or Cirrus might not like us, and 2 sigma should in theory only
+        # have to poll for 5% of branches spuriously...
+        #
+        # This relies on data being periodically summarised into
+        # build_status_statistics by a cronjob.
+        cursor.execute("""with ref as (select branch_name,
+                                              status,
+                                              avg_elapsed + stddev_elapsed * 2 as elapsed_p95
+                                         from build_status_statistics
+                                        where branch_name = 'master' or branch_name like 'REL_%'),
+                               run as (select build_id,
+                                              status,
+                                              branch_name,
+                                              case
+                                                when branch_name = 'master' or branch_name like 'REL_%'
+                                                then branch_name
+                                                else 'master'
+                                              end as reference_branch,
+                                              now() - created as elapsed
+                                         from build
+                                        where build.status not in ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED', 'DELETED'))
+                          select run.build_id,
+                                 run.reference_branch,
+                                 run.branch_name,
+                                 run.status,
+                                 extract(epoch from ref.elapsed_p95),
+                                 extract(epoch from run.elapsed)
+                            from run left join ref on (run.reference_branch = ref.branch_name)
+                           where run.elapsed > COALESCE(elapsed_p95, interval '30 minutes')""")
+        for (
+            build_id,
+            reference_branch,
+            branch_name,
+            build_status,
+            elapsed_p95,
+            elapsed,
+        ) in cursor.fetchall():
+            if elapsed_p95 == None:
+                # no reference data available, it's just "a really long time"
+                print(
+                    "build %s still has status %s after %.2fs"
+                    "" % (build_id, build_status, elapsed)
+                )
+            else:
+                print(
+                    "build %s still has status %s after %.2fs, longer than %.2fs which was enough for 95%% of recent COMPLETED builds on reference branch %s"
+                    ""
+                    % (
+                        build_id,
+                        build_status,
+                        float(elapsed),
+                        float(elapsed_p95),
+                        reference_branch,
+                    )
+                )
+            cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
+
+
 if __name__ == "__main__":
     #  print(get_commands_for_task('5646021133336576'))
     #   print(get_artifacts_for_task('5636792221696000'))
     with cfbot_util.db() as conn:
+        poll_stale_builds(conn)
         # poll_stale_branches(conn)
         # poll_stale_branch(conn, 201003)
         # poll_build(conn, 6247778155757568)
-        poll_stale_build(conn, "5471750814695424")
+        # poll_stale_build(conn, "5962629472059392")
+        # poll_stale_build(conn, "4947872984072192")
         # ingest_webhook(
         #    conn,
         #    "task",
