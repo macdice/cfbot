@@ -234,7 +234,7 @@ CREATE TABLE public.task_status_history (
     status text NOT NULL,
     received timestamp with time zone NOT NULL,
     source text,
-    sent timestamp with time zone
+    "timestamp" timestamp with time zone
 );
 
 

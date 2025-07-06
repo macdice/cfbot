@@ -360,7 +360,7 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
 
 # task row should be locked, must be a new task or change in status
 def process_new_task_status(
-    cursor, task_id, old_task_status, task_status, source, sent
+    cursor, task_id, old_task_status, task_status, source, timestamp
 ):
     # log new/changed status, update if changed
     if old_task_status:
@@ -379,9 +379,9 @@ def process_new_task_status(
 
     # maintain the history of status changes
     cursor.execute(
-        """insert into task_status_history(task_id, status, received, source, sent)
+        """insert into task_status_history(task_id, status, received, source, timestamp)
                       values (%s, %s, now(), %s, to_timestamp(%s::double precision / 1000))""",
-        (task_id, task_status, source, sent),
+        (task_id, task_status, source, timestamp),
     )
 
     # generate extra jobs depending on status
@@ -527,7 +527,7 @@ def ingest_webhook(conn, event_type, event):
         task_status = event["task"]["status"]
         task_name = event["task"]["name"]
         task_position = event["task"]["localGroupId"] + 1
-        task_sent = event["task"]["statusTimestamp"]
+        task_timestamp = event["task"]["statusTimestamp"]
 
         if action == "created":
             cursor.execute(
@@ -567,7 +567,7 @@ def ingest_webhook(conn, event_type, event):
                 # )
             else:
                 process_new_task_status(
-                    cursor, task_id, None, task_status, "webhook", task_sent
+                    cursor, task_id, None, task_status, "webhook", task_timestamp
                 )
         elif action == "updated":
             old_task_status = event["old_status"]
@@ -593,7 +593,12 @@ def ingest_webhook(conn, event_type, event):
             elif existing_task_status == old_task_status:
                 # we have the expected old value, common case
                 process_new_task_status(
-                    cursor, task_id, old_task_status, task_status, "webhook", task_sent
+                    cursor,
+                    task_id,
+                    old_task_status,
+                    task_status,
+                    "webhook",
+                    task_timestamp,
                 )
             else:
                 # unexpected or missing old value, fix by polling
@@ -675,7 +680,7 @@ def poll_stale_build(conn, build_id):
         task_name = task["name"]
         task_status = task["status"]
         position = task["localGroupId"] + 1
-        task_sent = task["statusTimestamp"]
+        task_timestamp = task["statusTimestamp"]
 
         # check if we already have this task, and what its status is
         cursor.execute(
@@ -690,7 +695,12 @@ def poll_stale_build(conn, build_id):
             (old_task_status, change) = row
             if change:
                 process_new_task_status(
-                    cursor, task_id, old_task_status, task_status, "poll", task_sent
+                    cursor,
+                    task_id,
+                    old_task_status,
+                    task_status,
+                    "poll",
+                    task_timestamp,
                 )
         else:
             # a task we haven't heard about before
@@ -707,7 +717,7 @@ def poll_stale_build(conn, build_id):
                 ),
             )
             process_new_task_status(
-                cursor, task_id, None, task_status, "poll", task_sent
+                cursor, task_id, None, task_status, "poll", task_timestamp
             )
 
             # tell the commitfest app
@@ -924,7 +934,7 @@ def poll_stale_tasks(conn):
 def refresh_task_status_statistics(conn):
     cursor = conn.cursor()
     cursor.execute(
-        """delete from task_status_history where sent < now() - interval '30 days'"""
+        """delete from task_status_history where timestamp < now() - interval '30 days'"""
     )
     cursor.execute("""delete from task_status_statistics""")
     cursor.execute("""insert into task_status_statistics
@@ -932,7 +942,7 @@ def refresh_task_status_statistics(conn):
                       with elapsed as (select build.branch_name as branch_name,
                                               task.task_name,
                                               h.status,
-                                              lead(h.sent) over(partition by h.task_id order by h.sent) - h.sent as elapsed
+                                              lead(h.timestamp) over(partition by h.task_id order by h.timestamp) - h.timestamp as elapsed
                                          from build
                                          join task using (build_id)
                                          join task_status_history h using (task_id)
