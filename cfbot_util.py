@@ -70,22 +70,6 @@ def post(url, d):
     response.raise_for_status()
 
 
-def gc(conn):
-    cursor = conn.cursor()
-    cursor.execute("""DELETE FROM task WHERE created < now() - interval '6 months'""")
-    cursor.execute(
-        """DELETE FROM task WHERE created < now() - interval '4 hours' AND status = 'EXECUTING'"""
-    )  # ?
-    cursor.execute("""DELETE FROM branch WHERE created < now() - interval '6 months'""")
-
-    # timing out branches is now done in cfbot_cirrus.py pull_build_results()
-    # cursor.execute(
-    #    """UPDATE branch SET status = 'timeout' WHERE created < now() - interval '2 hours' AND status = 'testing'"""
-    # )
-    # TODO: GC the git tree too!
-    conn.commit()
-
-
 def db():
     """Get a database connection."""
     return pg8000.connect(cfbot_config.DSN)

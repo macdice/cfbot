@@ -57,9 +57,6 @@ def run():
         # rebuild a new set of web pages
         cfbot_web.rebuild(conn, cfs, cf_ids)
 
-        # garbage collect old build results
-        cfbot_util.gc(conn)
-
 
 if __name__ == "__main__":
     # don't run if we're already running

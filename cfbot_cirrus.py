@@ -939,9 +939,6 @@ def poll_stale_tasks(conn):
 
 def refresh_task_status_statistics(conn):
     cursor = conn.cursor()
-    cursor.execute(
-        """delete from task_status_history where timestamp < now() - interval '30 days'"""
-    )
     cursor.execute("""delete from task_status_statistics""")
     cursor.execute("""insert into task_status_statistics
                              (branch_name, task_name, status, avg_elapsed, stddev_elapsed, n)
@@ -968,9 +965,6 @@ def refresh_task_status_statistics(conn):
 
 def refresh_build_status_statistics(conn):
     cursor = conn.cursor()
-    cursor.execute(
-        """delete from build_status_history where received < now() - interval '30 days'"""
-    )
     cursor.execute("""delete from build_status_statistics""")
     cursor.execute("""insert into build_status_statistics
                              (branch_name, status, avg_elapsed, stddev_elapsed, n)

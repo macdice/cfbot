@@ -75,3 +75,7 @@ else:
     logging.basicConfig(
         format="%(asctime)s %(message)s", stream=sys.stderr, level=logging.INFO
     )
+
+# data retention, in days
+RETENTION_LARGE_OBJECTS = 2
+RETENTION_ALL = 90
