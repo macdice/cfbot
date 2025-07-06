@@ -81,6 +81,7 @@ def get_builds_for_commit(owner, repo, sha):
           searchBuilds(repositoryOwner: $owner, repositoryName: $repo, SHA: $sha) {
             id
             status
+            branch
           }
         }
     """
@@ -123,7 +124,8 @@ def get_build(build_id):
 def poll_stale_branch(conn, branch_id):
     cursor = conn.cursor()
     cursor.execute(
-        """SELECT commit_id,
+        """SELECT submission_id,
+                  commit_id,
                   status,
                   build_id IS NULL AS no_build,
                   created < now() - interval '1 hour' AS timeout_reached
@@ -131,12 +133,11 @@ def poll_stale_branch(conn, branch_id):
             WHERE id = %s""",
         (branch_id,),
     )
-    commit_id, branch_status, no_build, timeout_reached = cursor.fetchone()
+    submission_id, commit_id, branch_status, no_build, timeout_reached = (
+        cursor.fetchone()
+    )
 
-    if branch_status != "testing":
-        # Nothing to do, it's not stale after all.
-        return
-    elif timeout_reached:
+    if branch_status == "testing" and timeout_reached:
         # Timeout reached, unless there has been a concurrent state change.
         cursor.execute(
             """UPDATE branch
@@ -161,10 +162,11 @@ def poll_stale_branch(conn, branch_id):
         # logging.info("builds for commit ID %s: %s", commit_id, builds)
         for build in builds:
             build_id = build["id"]
-            # XXX filter by branch name?
-            cfbot_work_queue.insert_work_queue_if_not_exists(
-                cursor, "poll-stale-build", build_id
-            )
+            build_branch = build["branch"]
+            if build_branch == "cf/" + str(submission_id):
+                cfbot_work_queue.insert_work_queue_if_not_exists(
+                    cursor, "poll-stale-build", build_id
+                )
 
 
 # Handler for "fetch-task-commands", a job enqueued once a task reaches a final
@@ -825,7 +827,7 @@ def poll_stale_builds(conn):
                                           end as reference_branch,
                                           now() - created as elapsed
                                      from build
-                                    where build.status not in ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED', 'DELETED'))
+                                    where build_status_running(status))
                       select run.build_id,
                              run.reference_branch,
                              run.branch_name,
@@ -858,6 +860,71 @@ def poll_stale_builds(conn):
                 build_status,
                 float(elapsed),
                 float(elapsed_p95),
+                reference_branch,
+            )
+        cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
+
+
+def poll_stale_tasks(conn):
+    cursor = conn.cursor()
+
+    # Same thing for tasks.
+    cursor.execute("""with ref as (select branch_name,
+                                          task_name,
+                                          status,
+                                          avg_elapsed + stddev_elapsed * 2 as elapsed_p95
+                                     from task_status_statistics
+                                    where branch_name = 'master' or branch_name like 'REL_%%'),
+                           run as (select task.task_id,
+                                          task.build_id,
+                                          task.task_name,
+                                          task.status,
+                                          build.branch_name,
+                                          case
+                                            when build.branch_name = 'master' or build.branch_name like 'REL_%%'
+                                            then build.branch_name
+                                            else 'master'
+                                          end as reference_branch,
+                                          now() - task.modified as elapsed
+                                     from task join build using (build_id)
+                                    where task_status_running(task.status))
+                      select run.task_id,
+                             run.build_id,
+                             run.reference_branch,
+                             run.branch_name,
+                             run.task_name,
+                             run.status,
+                             extract(epoch from ref.elapsed_p95),
+                             extract(epoch from run.elapsed)
+                        from run
+                   left join ref on ((run.reference_branch, run.task_name, run.status) = (ref.branch_name, ref.task_name, ref.status))
+                       where run.elapsed > COALESCE(elapsed_p95, interval '30 minutes')""")
+    for (
+        task_id,
+        build_id,
+        reference_branch,
+        branch_name,
+        task_name,
+        task_status,
+        elapsed_p95,
+        elapsed,
+    ) in cursor.fetchall():
+        if elapsed_p95 == None:
+            # no reference data available, it's just "a really long time"
+            logging.info(
+                "task %s still has status %s after %.2fs",
+                task_id,
+                task_status,
+                elapsed,
+            )
+        else:
+            logging.info(
+                "task %s still has status %s after %.2fs, longer than %.2fs which was enough for 95%% of recent COMPLETED tasks named '%s' on reference branch %s",
+                task_id,
+                task_status,
+                float(elapsed),
+                float(elapsed_p95),
+                task_name,
                 reference_branch,
             )
         cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
@@ -923,6 +990,5 @@ def refresh_build_status_statistics(conn):
 
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
-        refresh_task_status_statistics(conn)
-        refresh_build_status_statistics(conn)
+        poll_stale_tasks(conn)
         conn.commit()

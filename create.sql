@@ -17,6 +17,32 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+--
+-- Name: build_status_running(text); Type: FUNCTION; Schema: public; Owner: cfbot
+--
+
+CREATE FUNCTION public.build_status_running(status text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    BEGIN ATOMIC
+ SELECT (status = ANY (ARRAY['CREATED'::text, 'TRIGGERED'::text, 'EXECUTING'::text]));
+END;
+
+
+ALTER FUNCTION public.build_status_running(status text) OWNER TO cfbot;
+
+--
+-- Name: task_status_running(text); Type: FUNCTION; Schema: public; Owner: cfbot
+--
+
+CREATE FUNCTION public.task_status_running(status text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    BEGIN ATOMIC
+ SELECT (status = ANY (ARRAY['CREATED'::text, 'TRIGGERED'::text, 'SCHEDULED'::text, 'EXECUTING'::text]));
+END;
+
+
+ALTER FUNCTION public.task_status_running(status text) OWNER TO cfbot;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -392,6 +418,13 @@ CREATE INDEX branch_submission_id_created_idx ON public.branch USING btree (subm
 
 
 --
+-- Name: build_build_status_running_idx; Type: INDEX; Schema: public; Owner: cfbot
+--
+
+CREATE INDEX build_build_status_running_idx ON public.build USING btree (public.build_status_running(status)) WHERE public.build_status_running(status);
+
+
+--
 -- Name: build_commit_id_idx; Type: INDEX; Schema: public; Owner: cfbot
 --
 
@@ -424,6 +457,13 @@ CREATE INDEX task_commit_id_idx ON public.task USING btree (commit_id);
 --
 
 CREATE INDEX task_submission_id_idx ON public.task USING btree (submission_id);
+
+
+--
+-- Name: task_task_status_running_idx; Type: INDEX; Schema: public; Owner: cfbot
+--
+
+CREATE INDEX task_task_status_running_idx ON public.task USING btree (public.task_status_running(status)) WHERE public.task_status_running(status);
 
 
 --
