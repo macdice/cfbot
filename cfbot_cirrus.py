@@ -839,7 +839,7 @@ def poll_stale_builds(conn):
                 float(elapsed_p99),
                 reference_branch,
             )
-        cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
+        cfbot_work_queue.insert_work_queue_if_not_exists(cursor, "poll-stale-build", build_id)
 
 
 def poll_stale_tasks(conn):
@@ -904,7 +904,7 @@ def poll_stale_tasks(conn):
                 task_name,
                 reference_branch,
             )
-        cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
+        cfbot_work_queue.insert_work_queue_if_not_exists(cursor, "poll-stale-build", build_id)
 
 
 def refresh_task_status_statistics(conn):

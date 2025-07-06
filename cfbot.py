@@ -36,6 +36,7 @@ def run():
         cfbot_cirrus.poll_stale_branches(conn)
         cfbot_cirrus.poll_stale_builds(conn)
         cfbot_cirrus.poll_stale_tasks(conn)
+        conn.commit()
 
         # exchange data with the Commitfest app
         for name, cf in cfs.items():
