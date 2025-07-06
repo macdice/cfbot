@@ -682,7 +682,6 @@ def poll_stale_build(conn, build_id):
                 # needed for master/REL_XXX
                 commitfest_id, submission_id = None, None
 
-            logging.info("new task %s %s", task_id, task_status)
             cursor.execute(
                 """INSERT INTO task (task_id, build_id, position, commitfest_id, submission_id, task_name, commit_id, status, created, modified)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now())""",
