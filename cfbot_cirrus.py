@@ -782,17 +782,17 @@ def backfill_task_command(conn):
 def poll_stale_builds(conn):
     cursor = conn.cursor()
 
-    # Compute the elapsed time of 95% of all completed master/release
+    # Compute the elapsed time of 99% of all completed master/release
     # branch builds in recent time, and use that as a reference to decide
     # when it's time to start polling a build because it looks like it's
     # taking too long and we might have missed some updates.
     #
     # This policy is quite conservative, but we don't want to poll too
     # often, or Cirrus might not like us, and 2 sigma should in theory only
-    # have to poll for 5% of branches spuriously...
+    # have to poll for 1% of branches spuriously...
     cursor.execute("""with ref as (select branch_name,
                                           status,
-                                          avg_elapsed + stddev_elapsed * 2 as elapsed_p95
+                                          avg_elapsed + stddev_elapsed * 3 as elapsed_p99
                                      from build_status_statistics
                                     where branch_name = 'master' or branch_name like 'REL_%%'),
                            run as (select build_id,
@@ -810,20 +810,20 @@ def poll_stale_builds(conn):
                              run.reference_branch,
                              run.branch_name,
                              run.status,
-                             extract(epoch from ref.elapsed_p95),
+                             extract(epoch from ref.elapsed_p99),
                              extract(epoch from run.elapsed)
                         from run
                    left join ref on ((run.reference_branch, run.status) = (ref.branch_name, ref.status))
-                       where run.elapsed > COALESCE(elapsed_p95, interval '30 minutes')""")
+                       where run.elapsed > COALESCE(elapsed_p99, interval '30 minutes')""")
     for (
         build_id,
         reference_branch,
         branch_name,
         build_status,
-        elapsed_p95,
+        elapsed_p99,
         elapsed,
     ) in cursor.fetchall():
-        if elapsed_p95 == None:
+        if elapsed_p99 == None:
             # no reference data available, it's just "a really long time"
             logging.info(
                 "build %s still has status %s after %.2fs",
@@ -833,11 +833,11 @@ def poll_stale_builds(conn):
             )
         else:
             logging.info(
-                "build %s still has status %s after %.2fs, longer than %.2fs which was enough for 95%% of recent COMPLETED builds on reference branch %s",
+                "build %s still has status %s after %.2fs, longer than %.2fs which was enough for 99.7%% of recent COMPLETED builds on reference branch %s",
                 build_id,
                 build_status,
                 float(elapsed),
-                float(elapsed_p95),
+                float(elapsed_p99),
                 reference_branch,
             )
         cfbot_work_queue.insert_work_queue(cursor, "poll-stale-build", build_id)
@@ -850,7 +850,7 @@ def poll_stale_tasks(conn):
     cursor.execute("""with ref as (select branch_name,
                                           task_name,
                                           status,
-                                          avg_elapsed + stddev_elapsed * 2 as elapsed_p95
+                                          avg_elapsed + stddev_elapsed * 3 as elapsed_p99
                                      from task_status_statistics
                                     where branch_name = 'master' or branch_name like 'REL_%%'),
                            run as (select task.task_id,
@@ -872,11 +872,11 @@ def poll_stale_tasks(conn):
                              run.branch_name,
                              run.task_name,
                              run.status,
-                             extract(epoch from ref.elapsed_p95),
+                             extract(epoch from ref.elapsed_p99),
                              extract(epoch from run.elapsed)
                         from run
                    left join ref on ((run.reference_branch, run.task_name, run.status) = (ref.branch_name, ref.task_name, ref.status))
-                       where run.elapsed > COALESCE(elapsed_p95, interval '30 minutes')""")
+                       where run.elapsed > COALESCE(elapsed_p99, interval '30 minutes')""")
     for (
         task_id,
         build_id,
@@ -884,10 +884,10 @@ def poll_stale_tasks(conn):
         branch_name,
         task_name,
         task_status,
-        elapsed_p95,
+        elapsed_p99,
         elapsed,
     ) in cursor.fetchall():
-        if elapsed_p95 == None:
+        if elapsed_p99 == None:
             # no reference data available, it's just "a really long time"
             logging.info(
                 "task %s still has status %s after %.2fs",
@@ -897,11 +897,11 @@ def poll_stale_tasks(conn):
             )
         else:
             logging.info(
-                "task %s still has status %s after %.2fs, longer than %.2fs which was enough for 95%% of recent COMPLETED tasks named '%s' on reference branch %s",
+                "task %s still has status %s after %.2fs, longer than %.2fs which was enough for 99.7%% of recent COMPLETED tasks named '%s' on reference branch %s",
                 task_id,
                 task_status,
                 float(elapsed),
-                float(elapsed_p95),
+                float(elapsed_p99),
                 task_name,
                 reference_branch,
             )
