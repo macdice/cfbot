@@ -202,6 +202,40 @@ def fetch_task_commands(conn, task_id):
 PRE_EXECUTING_STATUSUS = ("CREATED", "TRIGGERED", "SCHEDULED")
 
 
+# Compute backoff.  Called when the current active build completes.
+def compute_submission_backoff(cursor, commitfest_id, submission_id, build_status):
+    if build_status == "COMPLETED":
+        # An auto-rebuilt triggered by Cirrus will generate a failed build
+        # followed by a potentially successful build through no fault of the
+        # patch's, so wipe all memory of backoffs on success.
+        cursor.execute(
+            """UPDATE submission
+                  SET backoff_until = NULL,
+                      last_backoff = NULL
+                WHERE commitfest_id = %s
+                  AND submission_id = %s""",
+            (commitfest_id, submission_id),
+        )
+    elif build_status in FINAL_BUILD_STATUSES:
+        # Double it every time
+        cursor.execute(
+            """UPDATE submission
+                  SET backoff_until = now() + COALESCE(last_backoff * 2, interval '1 day'),
+                      last_backoff = COALESCE(last_backoff * 2, interval '1 day')
+                WHERE commitfest_id = %s
+                  AND submission_id = %s
+            RETURNING EXTRACT(days FROM last_backoff)""",
+            (commitfest_id, submission_id),
+        )
+        (backoff,) = cursor.fetchone()
+        logging.info(
+            "submission %s/%s backoff time set to %s days",
+            commitfest_id,
+            submission_id,
+            backoff,
+        )
+
+
 # We track the "current" build for each cfbot-managed branch.  The current
 # branch is the one that is still in progress, or otherwise the latest one.
 # Called by both poll_stale_branch() and ingest_webhook().
@@ -249,7 +283,7 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
             # subnmission (should probably be branch_name), and prepare to
             # merge details from this build into it.
             cursor.execute(
-                """SELECT id, build_id, status
+                """SELECT id, build_id, status, commitfest_id
                      FROM branch
                     WHERE submission_id = %s
                       AND commit_id = %s
@@ -258,7 +292,9 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
                     LIMIT 1""",
                 (submission_id, commit_id),
             )
-            branch_id, old_build_id, old_branch_status = cursor.fetchone()
+            branch_id, old_build_id, old_branch_status, commitfest_id = (
+                cursor.fetchone()
+            )
             branch_modified = False
 
             # If it wasn't tracking this build ID, update it.
@@ -273,6 +309,12 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
                 )
                 logging.info(
                     "branch %s active build %s -> %s", branch_id, old_build_id, build_id
+                )
+
+            # Compute new backoff.
+            if build_status in FINAL_BUILD_STATUSES:
+                compute_submission_backoff(
+                    cursor, commitfest_id, submission_id, build_status
                 )
 
             # The current build's status determines the branch's status.
@@ -839,7 +881,9 @@ def poll_stale_builds(conn):
                 float(elapsed_p99),
                 reference_branch,
             )
-        cfbot_work_queue.insert_work_queue_if_not_exists(cursor, "poll-stale-build", build_id)
+        cfbot_work_queue.insert_work_queue_if_not_exists(
+            cursor, "poll-stale-build", build_id
+        )
 
 
 def poll_stale_tasks(conn):
@@ -904,7 +948,9 @@ def poll_stale_tasks(conn):
                 task_name,
                 reference_branch,
             )
-        cfbot_work_queue.insert_work_queue_if_not_exists(cursor, "poll-stale-build", build_id)
+        cfbot_work_queue.insert_work_queue_if_not_exists(
+            cursor, "poll-stale-build", build_id
+        )
 
 
 def refresh_task_status_statistics(conn):
@@ -967,5 +1013,6 @@ def refresh_build_status_statistics(conn):
 
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
-        poll_stale_tasks(conn)
+        cursor = conn.cursor()
+        compute_submission_backoff(cursor, 52, 3478, "COMPLETED")
         conn.commit()
