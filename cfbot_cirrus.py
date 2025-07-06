@@ -927,10 +927,9 @@ def refresh_task_status_statistics(conn):
         """delete from task_status_history where sent < now() - interval '30 days'"""
     )
     cursor.execute("""delete from task_status_statistics""")
-    # XXX waiting for more data before removing hard coded 'master' from here...
     cursor.execute("""insert into task_status_statistics
                              (branch_name, task_name, status, avg_elapsed, stddev_elapsed, n)
-                      with elapsed as (select coalesce('master', build.branch_name) as branch_name,
+                      with elapsed as (select build.branch_name as branch_name,
                                               task.task_name,
                                               h.status,
                                               lead(h.sent) over(partition by h.task_id order by h.sent) - h.sent as elapsed
@@ -938,7 +937,7 @@ def refresh_task_status_statistics(conn):
                                          join task using (build_id)
                                          join task_status_history h using (task_id)
                                         where task.status = 'COMPLETED'
-                                      --- and (build.branch_name = 'master' or build.branch_name like 'REL_%%')
+                                          and (build.branch_name = 'master' or build.branch_name like 'REL_%%')
                                         )
                       select branch_name,
                              task_name,
@@ -948,8 +947,7 @@ def refresh_task_status_statistics(conn):
                              count(elapsed) as n
                         from elapsed
                        where elapsed is not null
-                       group by 1, 2, 3
-                  --- having count(*) > 1""")
+                       group by 1, 2, 3""")
 
 
 def refresh_build_status_statistics(conn):
@@ -960,13 +958,13 @@ def refresh_build_status_statistics(conn):
     cursor.execute("""delete from build_status_statistics""")
     cursor.execute("""insert into build_status_statistics
                              (branch_name, status, avg_elapsed, stddev_elapsed, n)
-                      with elapsed as (select coalesce('master', build.branch_name) as branch_name,
+                      with elapsed as (select build.branch_name as branch_name,
                                               h.status,
                                               lead(received) over (partition by h.build_id order by received) - received as elapsed
                                          from build_status_history h
                                          join build using (build_id)
                                         where build.status = 'COMPLETED'
-                                      --- and (build.branch_name = 'master' or build.branch_name like 'REL_%%')
+                                          and (build.branch_name = 'master' or build.branch_name like 'REL_%%')
                                         )
                       select branch_name,
                              status,
@@ -975,8 +973,7 @@ def refresh_build_status_statistics(conn):
                              count(elapsed) as n
                         from elapsed
                        where elapsed is not null
-                       group by 1, 2
-                  --- having count(*) > 1""")
+                       group by 1, 2""")
 
 
 if __name__ == "__main__":
