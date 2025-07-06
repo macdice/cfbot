@@ -480,28 +480,6 @@ def ingest_webhook(conn, event_type, event):
         # synchronise the branch
         update_branch(cursor, build_id, build_status, commit_id, build_branch)
 
-        if build_status in FINAL_BUILD_STATUSES:
-            # We perform this sanity check only in the webhook case, not in the polling case,
-            # since the latter could loop forever if Cirrus actually has inconsistent data!
-            cursor.execute(
-                """SELECT COUNT(*)
-                                FROM task
-                               WHERE build_id = %s
-                                 AND status NOT IN ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED', 'PAUSED')
-                               LIMIT 1""",
-                (build_id,),
-            )
-            (running_tasks,) = cursor.fetchone()
-            if running_tasks > 0:
-                logging.info(
-                    "webhook out of sync: build %s has final status but has %d tasks with non-final, non-PAUSED status",
-                    build_id,
-                    running_tasks,
-                )
-                cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "poll-stale-build", build_id
-                )
-
     elif event_type == "task":
         task_id = event["task"]["id"]
         task_status = event["task"]["status"]
