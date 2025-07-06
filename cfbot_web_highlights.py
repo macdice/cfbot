@@ -153,7 +153,7 @@ select s.name,
        h.excerpt
   from latest_submission s
   join latest_branch b on b.submission_id = s.submission_id
-  join task t on t.submission_id = b.submission_id and t.commit_id = b.commit_id
+  join task t on t.commit_id = b.commit_id
   join highlight h on h.task_id = t.task_id
  where s.status in ('Ready for Committer', 'Needs review', 'Waiting on Author')
        %s
@@ -169,7 +169,12 @@ with latest_submission as (select distinct on (submission_id)
                                   submission_id,
                                   name
                              from submission
-                            order by submission_id, commitfest_id desc)
+                            order by submission_id, commitfest_id desc),
+     latest_branch as (select distinct on (submission_id)
+                              commit_id,
+                              submission_id
+                         from branch
+                        order by submission_id, created desc)
 select s.name,
        s.commitfest_id,
        s.submission_id,
@@ -181,7 +186,8 @@ select s.name,
        h.source,
        h.excerpt
   from latest_submission s
-  join task t using (submission_id)
+  join latest_branch b using (submission_id)
+  join task t using (commit_id)
   join highlight h using (task_id)
  where created > now() - interval '%s days'
        %s

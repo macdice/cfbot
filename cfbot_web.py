@@ -49,7 +49,7 @@ SVG_CONTENT = {
 def svg_img(svg_type):
     if svg_type not in SVG_CONTENT:
         raise ValueError(f"Invalid SVG type: {svg_type}")
-    html_template = '<img src="{src}" alt="" width="20" height="20"/>'
+    html_template = '<img src="/{src}" alt="" width="20" height="20"/>'
     return html_template.format(src=f"{svg_type}.svg")
 
 
