@@ -311,12 +311,6 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
                     "branch %s active build %s -> %s", branch_id, old_build_id, build_id
                 )
 
-            # Compute new backoff.
-            if build_status in FINAL_BUILD_STATUSES:
-                compute_submission_backoff(
-                    cursor, commitfest_id, submission_id, build_status
-                )
-
             # The current build's status determines the branch's status.
             # The only status we won't overwrite is "timeout", which means
             # we've decided the branch is dead (we won't poll it, and it won't
@@ -351,6 +345,18 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
                         old_branch_status,
                         branch_status,
                     )
+
+                    # XXX Should backoff apply when branch status is timeout?
+                    # Current answer is no, because we can't tell the
+                    # difference between timeout caused by Florida Mac (not
+                    # patch's fault) and timeout caused by the user's patch
+                    # hanging.  But in the case of a patch hanging, hopefully
+                    # Cirrus times out and gives us FAILED or ABORTED?  Need to
+                    # look into that...
+                    if build_status in FINAL_BUILD_STATUSES:
+                        compute_submission_backoff(
+                            cursor, commitfest_id, submission_id, build_status
+                        )
 
             if branch_modified:
                 cfbot_work_queue.insert_work_queue_if_not_exists(
