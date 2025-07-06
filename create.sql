@@ -196,8 +196,6 @@ ALTER TABLE public.submission OWNER TO cfbot;
 --
 
 CREATE TABLE public.task (
-    commitfest_id integer,
-    submission_id integer,
     task_name text NOT NULL,
     commit_id text,
     status text NOT NULL,
@@ -453,13 +451,6 @@ CREATE INDEX task_commit_id_idx ON public.task USING btree (commit_id);
 
 
 --
--- Name: task_submission_id_idx; Type: INDEX; Schema: public; Owner: cfbot
---
-
-CREATE INDEX task_submission_id_idx ON public.task USING btree (submission_id);
-
-
---
 -- Name: task_task_status_running_idx; Type: INDEX; Schema: public; Owner: cfbot
 --
 
@@ -487,14 +478,6 @@ ALTER TABLE ONLY public.branch
 
 ALTER TABLE ONLY public.branch
     ADD CONSTRAINT branch_commitfest_id_submission_id_fkey FOREIGN KEY (commitfest_id, submission_id) REFERENCES public.submission(commitfest_id, submission_id);
-
-
---
--- Name: task build_result_commitfest_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: cfbot
---
-
-ALTER TABLE ONLY public.task
-    ADD CONSTRAINT build_result_commitfest_id_fkey FOREIGN KEY (commitfest_id, submission_id) REFERENCES public.submission(commitfest_id, submission_id);
 
 
 --

@@ -216,13 +216,14 @@ WITH task_positions AS (SELECT DISTINCT ON (task_name)
                           FROM task
                          WHERE commit_id = %s
                       ORDER BY task_name, modified DESC),
-     prev_statuses AS  (SELECT DISTINCT ON (task_name)
-                               task_name,
-                               status AS prev_status
+     prev_statuses AS  (SELECT DISTINCT ON (task.task_name)
+                               task.task_name,
+                               task.status AS prev_status
                           FROM task
-                         WHERE commit_id != %s
-                           AND submission_id = %s
-                      ORDER BY task_name, modified DESC)
+                          JOIN branch USING (commit_id)
+                         WHERE task.commit_id != %s
+                           AND branch.submission_id = %s
+                      ORDER BY task.task_name, task.modified DESC)
      SELECT task_id,
             task_name,
             age,
