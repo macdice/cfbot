@@ -767,43 +767,6 @@ def poll_stale_branches(conn):
     conn.commit()
 
 
-def backfill_artifact(conn):
-    cursor = conn.cursor()
-    cursor.execute("""SELECT commitfest_id, submission_id, task_name, commit_id, task_id
-                      FROM task t
-                     WHERE status = 'FAILED'
-                       AND NOT EXISTS (SELECT *
-                                         FROM artifact a
-                                        WHERE t.task_id = a.task_id)""")
-    for commitfest_id, submission_id, name, commit_id, task_id in cursor.fetchall():
-        for name, path, size in get_artifacts_for_task(task_id):
-            cursor.execute(
-                """INSERT INTO artifact (task_id, name, path, size)
-                        VALUES (%s, %s, %s, %s)
-                        ON CONFLICT DO NOTHING""",
-                (task_id, name, path, size),
-            )
-        conn.commit()
-
-
-def backfill_task_command(conn):
-    cursor = conn.cursor()
-    cursor.execute("""SELECT commitfest_id, submission_id, task_name, commit_id, task_id
-                      FROM task t
-                     WHERE status IN ('FAILED', 'COMPLETED')
-                       AND NOT EXISTS (SELECT *
-                                         FROM task_command c
-                                        WHERE t.task_id = c.task_id)""")
-    for commitfest_id, submission_id, name, commit_id, task_id in cursor.fetchall():
-        for name, xtype, status, duration, log in get_commands_for_task(task_id):
-            cursor.execute(
-                """INSERT INTO task_command (task_id, name, type, status, duration, log)
-                        VALUES (%s, %s, %s, %s, %s * interval '1 second', %s)""",
-                (task_id, name, xtype, status, duration, log),
-            )
-        conn.commit()
-
-
 def poll_stale_builds(conn):
     cursor = conn.cursor()
 
