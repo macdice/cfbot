@@ -749,17 +749,21 @@ def poll_stale_build(conn, build_id):
     update_branch(cursor, build_id, build_status, commit_id, build_branch)
 
 
-# Handler for "poll-stale-branches".
+# Called periodically to check if any branches appear to be stuck.  That is, we
+# haven't yet heard about a build assocated with this branch, so we might have
+# missed a webhook.  If so, queue up a job to poll for new builds associated
+# with the commit ID.
 #
-# Queued periodically by cron, to look out for branches that we should poll
-# because they seem to be stuck in 'testing' and not moving.
-def poll_stale_branches(conn):
+# There is a hard-coded grace period of 1 minute before we resort to that.
+# Usually we hear about a build within seconds, and find a branch to link it
+# to.
+def check_stale_branches(conn):
     cursor = conn.cursor()
     cursor.execute("""SELECT id
                         FROM branch
                        WHERE status = 'testing'
                          AND build_id IS NULL
-                         AND created < now() - interval '5 minutes'""")
+                         AND created < now() - interval '1 minute'""")
     for (branch_id,) in cursor.fetchall():
         cfbot_work_queue.insert_work_queue_if_not_exists(
             cursor, "poll-stale-branch", branch_id
@@ -767,7 +771,9 @@ def poll_stale_branches(conn):
     conn.commit()
 
 
-def poll_stale_builds(conn):
+# Called periodically to check if any builds have exceeded the statistically
+# expected time in a running state, and if so, queue up a job to poll them.
+def check_stale_builds(conn):
     cursor = conn.cursor()
 
     # Compute the elapsed time of 99% of all completed master/release
@@ -833,7 +839,10 @@ def poll_stale_builds(conn):
         )
 
 
-def poll_stale_tasks(conn):
+# Called periodically to check if any tasks have exceeded the statistically
+# expected time in a running state, and if so, queue up a job to poll the
+# relevant build.
+def check_stale_tasks(conn):
     cursor = conn.cursor()
 
     # Same thing for tasks.

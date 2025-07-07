@@ -33,9 +33,11 @@ def run():
         # get the current Commitfest ID
         cfs = cfbot_commitfest_rpc.get_current_commitfests()
 
-        cfbot_cirrus.poll_stale_branches(conn)
-        cfbot_cirrus.poll_stale_builds(conn)
-        cfbot_cirrus.poll_stale_tasks(conn)
+        # Look for stuck builds, in case have missed a webhook or it is time to
+        # time out.
+        cfbot_cirrus.check_stale_branches(conn)
+        cfbot_cirrus.check_stale_builds(conn)
+        cfbot_cirrus.check_stale_tasks(conn)
         conn.commit()
 
         # exchange data with the Commitfest app
