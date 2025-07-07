@@ -197,7 +197,6 @@ ALTER TABLE public.submission OWNER TO cfbot;
 
 CREATE TABLE public.task (
     task_name text NOT NULL,
-    commit_id text,
     status text NOT NULL,
     created timestamp with time zone NOT NULL,
     modified timestamp with time zone NOT NULL,
@@ -441,13 +440,6 @@ CREATE INDEX highlight_task_id_type_idx ON public.highlight USING btree (task_id
 --
 
 CREATE INDEX task_command_task_id_name_idx ON public.task_command USING btree (task_id, name);
-
-
---
--- Name: task_commit_id_idx; Type: INDEX; Schema: public; Owner: cfbot
---
-
-CREATE INDEX task_commit_id_idx ON public.task USING btree (commit_id);
 
 
 --

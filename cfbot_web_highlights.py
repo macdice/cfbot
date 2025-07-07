@@ -121,10 +121,7 @@ def build_page(conn, base_path, mode, when):
             # really only care about one.  Need to start treating subsmissions as a single
             # entity that can change commitfest.
 
-            # The latest_branch CTE is also a bit silly; what is missing is a 'build' table.
-            # A single 'branch' that we push can in fact be re-built on Cirrus, which creates
-            # a new 'build', so the model is currently wrong.  Using commit_id to link tasks
-            # to branches is inefficient and incorrect, ... but mostly works.
+            # XXX latest branch might be better as latest build?
 
             cursor.execute(
                 """
@@ -153,7 +150,8 @@ select s.name,
        h.excerpt
   from latest_submission s
   join latest_branch b on b.submission_id = s.submission_id
-  join task t on t.commit_id = b.commit_id
+  join build using (commit_id)
+  join task t using (build_id)
   join highlight h on h.task_id = t.task_id
  where s.status in ('Ready for Committer', 'Needs review', 'Waiting on Author')
        %s
@@ -187,9 +185,10 @@ select s.name,
        h.excerpt
   from latest_submission s
   join latest_branch b using (submission_id)
-  join task t using (commit_id)
+  join build using (commit_id)
+  join task t using (build_id)
   join highlight h using (task_id)
- where created > now() - interval '%s days'
+ where t.created > now() - interval '%s days'
        %s
  order by t.created desc, t.task_name, h.type, h.source
 """

@@ -553,15 +553,14 @@ def ingest_webhook(conn, event_type, event):
                 return
 
             cursor.execute(
-                """INSERT INTO task (task_id, build_id, position, task_name, commit_id, status, created, modified)
-                   VALUES (%s, %s, %s, %s, %s, %s, now(), now())
+                """INSERT INTO task (task_id, build_id, position, task_name, status, created, modified)
+                   VALUES (%s, %s, %s, %s, %s, now(), now())
               ON CONFLICT DO NOTHING""",
                 (
                     task_id,
                     build_id,
                     task_position,
                     task_name,
-                    commit_id,
                     task_status,
                 ),
             )
@@ -711,14 +710,13 @@ def poll_stale_build(conn, build_id):
         else:
             # a task we haven't heard about before
             cursor.execute(
-                """INSERT INTO task (task_id, build_id, position, task_name, commit_id, status, created, modified)
-                   VALUES (%s, %s, %s, %s, %s, %s, now(), now())""",
+                """INSERT INTO task (task_id, build_id, position, task_name, status, created, modified)
+                   VALUES (%s, %s, %s, %s, %s, now(), now())""",
                 (
                     task_id,
                     build_id,
                     position,
                     task_name,
-                    commit_id,
                     task_status,
                 ),
             )

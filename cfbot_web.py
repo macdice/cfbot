@@ -188,7 +188,8 @@ def load_submissions(conn, cf_ids):
             """SELECT DISTINCT type
                         FROM highlight
                         JOIN task USING (task_id)
-                       WHERE task.commit_id = %s
+                        JOIN build USING (build_id)
+                       WHERE build.commit_id = %s
                        ORDER BY 1
                        """,
             (commit_id,),
@@ -202,26 +203,29 @@ def load_submissions(conn, cf_ids):
         # new or had a different status in the past 24 hours
         cursor.execute(
             """
-WITH task_positions AS (SELECT DISTINCT ON (task_name)
-                               task_name,
-                               position
+WITH task_positions AS (SELECT DISTINCT ON (task.task_name)
+                               task.task_name,
+                               task.position
                           FROM task
-                         WHERE commit_id = %s
-                      ORDER BY task_name, modified),
-     latest_tasks AS   (SELECT DISTINCT ON (task_name)
-                               task_name,
-                               task_id,
-                               status,
-                               EXTRACT(epoch FROM now() - modified) AS age
+                          JOIN build USING (build_id)
+                         WHERE build.commit_id = %s
+                      ORDER BY task.task_name, task.modified),
+     latest_tasks AS   (SELECT DISTINCT ON (task.task_name)
+                               task.task_name,
+                               task.task_id,
+                               task.status,
+                               EXTRACT(epoch FROM now() - task.modified) AS age
                           FROM task
-                         WHERE commit_id = %s
-                      ORDER BY task_name, modified DESC),
+                          JOIN build USING (build_id)
+                         WHERE build.commit_id = %s
+                      ORDER BY task.task_name, task.modified DESC),
      prev_statuses AS  (SELECT DISTINCT ON (task.task_name)
                                task.task_name,
                                task.status AS prev_status
                           FROM task
+                          JOIN build USING (build_id)
                           JOIN branch USING (commit_id)
-                         WHERE task.commit_id != %s
+                         WHERE build.commit_id != %s
                            AND branch.submission_id = %s
                       ORDER BY task.task_name, task.modified DESC)
      SELECT task_id,
