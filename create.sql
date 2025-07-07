@@ -196,13 +196,13 @@ ALTER TABLE public.submission OWNER TO cfbot;
 --
 
 CREATE TABLE public.task (
+    task_id text NOT NULL,
+    build_id text NOT NULL,
+    "position" integer NOT NULL,
     task_name text NOT NULL,
     status text NOT NULL,
     created timestamp with time zone NOT NULL,
-    modified timestamp with time zone NOT NULL,
-    task_id text NOT NULL,
-    "position" integer NOT NULL,
-    build_id text NOT NULL
+    modified timestamp with time zone NOT NULL
 );
 
 
