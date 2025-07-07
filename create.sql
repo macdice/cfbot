@@ -133,7 +133,7 @@ CREATE TABLE public.build_status_history (
     build_id text NOT NULL,
     status text NOT NULL,
     received timestamp with time zone NOT NULL,
-    source text
+    source text NOT NULL
 );
 
 
@@ -233,8 +233,8 @@ CREATE TABLE public.task_status_history (
     task_id text NOT NULL,
     status text NOT NULL,
     received timestamp with time zone NOT NULL,
-    source text,
-    "timestamp" timestamp with time zone
+    source text NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL
 );
 
 
