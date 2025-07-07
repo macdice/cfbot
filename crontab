@@ -1,0 +1,4 @@
+* * * * * cd cfbot && python3 cfbot_periodic_minutely.py
+0 * * * * cd cfbot && python3 cfbot_periodic_hourly.py && ./dump_status_stats.sh
+0 0 * * * cd cfbot && python3 cfbot_periodic_daily.py
+12 0 * * * cd cfbot && python3 cfbot_web_statistics.py
