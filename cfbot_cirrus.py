@@ -199,7 +199,7 @@ def fetch_task_commands(conn, task_id):
     cfbot_work_queue.insert_work_queue(cursor, "fetch-task-logs", task_id)
 
 
-PRE_EXECUTING_STATUSUS = ("CREATED", "TRIGGERED", "SCHEDULED")
+PRE_EXECUTING_STATUSES = ("CREATED", "TRIGGERED", "SCHEDULED")
 
 
 # Compute backoff.  Called when the current active build completes.

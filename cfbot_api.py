@@ -51,7 +51,7 @@ def cirrus_webhook():
             return "OK"
         else:
             return "not understood"
-    except RuntimeError as e:
+    except:
         error_cleanup()
         logging.exception("Error processing webhook")
-        return "NOT OK: " + str(e)
+        return "NOT OK"
