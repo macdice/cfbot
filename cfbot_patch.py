@@ -184,6 +184,14 @@ def get_commit_id(repo_dir):
     )
 
 
+def reset_commit_id(repo_dir, commit_id):
+    subprocess.call(
+        "cd %s && git checkout . -q > /dev/null && git clean -fd > /dev/null && git checkout -q master && git reset --hard %s -q"
+        % (repo_dir, commit_id),
+        shell=True,
+    )
+
+
 def make_branch(burner_repo_path, submission_id):
     branch = f"cf/{submission_id}"
     logging.info("creating branch %s" % branch)
@@ -302,14 +310,36 @@ def update_submission(conn, message_id, commit_id, commitfest_id, submission_id)
     )
 
 
+def reset_repo_to_good_master_commit(conn, repo_path):
+    # find the most recent commit ID that succeeded on master
+    cursor = conn.cursor()
+    cursor.execute("""SELECT commit_id
+                        FROM build
+                       WHERE branch_name = 'master'
+                         AND status = 'COMPLETED'
+                    ORDER BY created DESC
+                       LIMIT 1""")
+    (good_commit_id,) = cursor.fetchone()
+
+    commit_id = get_commit_id(repo_path)
+    if commit_id != good_commit_id:
+        logging.info("updating repo to find last good master commit %s", good_commit_id)
+        update_patchbase_tree(repo_path)
+
+    reset_commit_id(repo_path, good_commit_id)
+    commit_id = get_commit_id(repo_path)
+    assert commit_id == good_commit_id
+
+    return commit_id
+
+
 def process_submission(conn, commitfest_id, submission_id):
     cursor = conn.cursor()
     template_repo_path = patchburner_ctl("template-repo-path").strip()
     burner_repo_path = patchburner_ctl("burner-repo-path").strip()
     patch_dir = patchburner_ctl("burner-patch-path").strip()
-    # print "got %s" % update_patchbase_tree()
-    update_patchbase_tree(template_repo_path)
-    commit_id = get_commit_id(template_repo_path)
+    commit_id = reset_repo_to_good_master_commit(conn, template_repo_path)
+
     logging.info("processing submission %d, %d" % (commitfest_id, submission_id))
     # create a fresh patchburner jail
     patchburner_ctl("destroy")
@@ -463,8 +493,5 @@ def maybe_process_one(conn, cf_ids):
 
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
-        # maybe_process_one(conn)
-        if len(sys.argv) != 3:
-            print("Usage: %s <commitfest_id> <submission_id>" % sys.argv[0])
-            sys.exit(1)
-        process_submission(conn, int(sys.argv[1]), int(sys.argv[2]))
+        template_repo_path = patchburner_ctl("template-repo-path").strip()
+        print(reset_repo_to_good_master_commit(conn, template_repo_path))
