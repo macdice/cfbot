@@ -781,19 +781,23 @@ def check_stale_builds(conn):
     #
     # This policy is quite conservative, but we don't want to poll too
     # often, or Cirrus might not like us, and 2 sigma should in theory only
-    # have to poll for 1% of branches spuriously...
+    # have to poll for 0.3% of branches spuriously...
+    #
+    # Currently the refresh job combines all cf/* branches into one statistics
+    # row and uses that as a reference for all cf/... branches, rather than
+    # using master's statistics, because cf/* branches run on a different kind
+    # of hardware for macOS.  It seems to be a bit faster in EXECUTING, but
+    # spend much longer in SCHEDULED.
     cursor.execute("""with ref as (select branch_name,
                                           status,
                                           avg_elapsed + stddev_elapsed * 3 as elapsed_p99
-                                     from build_status_statistics
-                                    where branch_name = 'master' or branch_name like 'REL_%%'),
+                                     from build_status_statistics),
                            run as (select build_id,
                                           status,
                                           branch_name,
                                           case
-                                            when branch_name = 'master' or branch_name like 'REL_%%'
-                                            then branch_name
-                                            else 'master'
+                                            when build.branch_name like 'cf/%%' then 'cf/*'
+                                            else build.branch_name
                                           end as reference_branch,
                                           now() - created as elapsed
                                      from build
@@ -848,17 +852,15 @@ def check_stale_tasks(conn):
                                           task_name,
                                           status,
                                           avg_elapsed + stddev_elapsed * 3 as elapsed_p99
-                                     from task_status_statistics
-                                    where branch_name = 'master' or branch_name like 'REL_%%'),
+                                     from task_status_statistics),
                            run as (select task.task_id,
                                           task.build_id,
                                           task.task_name,
                                           task.status,
                                           build.branch_name,
                                           case
-                                            when build.branch_name = 'master' or build.branch_name like 'REL_%%'
-                                            then build.branch_name
-                                            else 'master'
+                                            when build.branch_name like 'cf/%%' then 'cf/*'
+                                            else build.branch_name
                                           end as reference_branch,
                                           now() - task.modified as elapsed
                                      from task join build using (build_id)
@@ -912,16 +914,17 @@ def refresh_task_status_statistics(conn):
     cursor.execute("""delete from task_status_statistics""")
     cursor.execute("""insert into task_status_statistics
                              (branch_name, task_name, status, avg_elapsed, stddev_elapsed, n)
-                      with elapsed as (select build.branch_name as branch_name,
+                      with elapsed as (select case
+                                                when build.branch_name like 'cf/%%' then 'cf/*'
+                                                else branch_name
+                                              end as branch_name,
                                               task.task_name,
                                               h.status,
                                               lead(h.timestamp) over(partition by h.task_id order by h.timestamp) - h.timestamp as elapsed
                                          from build
                                          join task using (build_id)
                                          join task_status_history h using (task_id)
-                                        where task.status = 'COMPLETED'
-                                          and (build.branch_name = 'master' or build.branch_name like 'REL_%%')
-                                        )
+                                        where task.status = 'COMPLETED')
                       select branch_name,
                              task_name,
                              status,
@@ -938,14 +941,15 @@ def refresh_build_status_statistics(conn):
     cursor.execute("""delete from build_status_statistics""")
     cursor.execute("""insert into build_status_statistics
                              (branch_name, status, avg_elapsed, stddev_elapsed, n)
-                      with elapsed as (select build.branch_name as branch_name,
+                      with elapsed as (select case
+                                                when build.branch_name like 'cf/%%' then 'cf/*'
+                                                else branch_name
+                                              end as branch_name,
                                               h.status,
                                               lead(received) over (partition by h.build_id order by received) - received as elapsed
                                          from build_status_history h
                                          join build using (build_id)
-                                        where build.status = 'COMPLETED'
-                                          and (build.branch_name = 'master' or build.branch_name like 'REL_%%')
-                                        )
+                                        where build.status = 'COMPLETED')
                       select branch_name,
                              status,
                              avg(elapsed),
