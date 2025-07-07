@@ -203,7 +203,7 @@ CREATE TABLE public.task (
     modified timestamp with time zone NOT NULL,
     task_id text NOT NULL,
     "position" integer NOT NULL,
-    build_id text
+    build_id text NOT NULL
 );
 
 
