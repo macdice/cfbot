@@ -40,7 +40,11 @@ def run():
         cfbot_cirrus.check_stale_tasks(conn)
         conn.commit()
 
-        # exchange data with the Commitfest app
+        # XXX We should get this information by receiving a POST from the
+        # cfapp on a new endpoint.  We'd probably want to poll for missed
+        # updates occasionally, but using proper JSON endpoints instead of
+        # scraping, and with low frequency since it'd only be a last resort way
+        # to stay in sync.
         for name, cf in cfs.items():
             if cf is None:
                 logging.info(f"skipping pulling submissions for {name} commitfest")
@@ -53,10 +57,16 @@ def run():
 
         cfbot_commitfest.pull_modified_threads(conn)
 
-        # build one patch, if it is time for that
+        # XXX This should probably become a work_queue job so that it can also
+        # be queued when a build finishes (instead of waiting for this cron job
+        # to run again), but first we need more sophisticated rate limiting
+        # with the requisite interlocking to make it reliable.
         cfbot_patch.maybe_process_one(conn, cf_ids)
 
-        # rebuild a new set of web pages
+        # XXX We should probably stop building web pages, or if we're going to
+        # keep doing it, build them with work_queue jobs when relevant data
+        # changes, not every minute, or just make real dynamic pages with
+        # Flask?
         cfbot_web.rebuild(conn, cfs, cf_ids)
 
 
