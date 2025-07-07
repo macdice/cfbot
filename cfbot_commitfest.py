@@ -197,10 +197,6 @@ def make_task_status_message(conn, task_id):
 def make_task_update_message(conn, task_id):
     task_status = make_task_status_message(conn, task_id)
 
-    if task_status["build_id"] == None:
-        logging.info("task %s is a legacy task with no build ID, can't post", task_id)
-        return None
-
     branch_status = make_branch_status_message(conn, build_id=task_status["build_id"])
     if not branch_status:
         logging.info(

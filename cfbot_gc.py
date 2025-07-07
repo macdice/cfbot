@@ -42,68 +42,6 @@ def gc(conn):
     logging.info("garbage collected %d task_command logs", cursor.rowcount)
     conn.commit()
 
-    # XXX GC for legacy tasks that don't have a build_id; once those age out,
-    # we can change task.build_id to NOT NULL and delete these queries that
-    # say "where build_id is null"
-    cursor.execute(
-        """
-  delete from artifact
-   where task_id in (select task_id
-                       from task
-                      where build_id is null
-                        and created < now() - interval '1 day' * %s)""",
-        (cfbot_config.RETENTION_ALL,),
-    )
-    cursor.execute(
-        """
-  delete from test
-   where task_id in (select task_id
-                       from task
-                      where build_id is null
-                        and created < now() - interval '1 day' * %s)""",
-        (cfbot_config.RETENTION_ALL,),
-    )
-    cursor.execute(
-        """
-  delete from task_command
-   where task_id in (select task_id
-                       from task
-                      where build_id is null
-                        and created < now() - interval '1 day' * %s)""",
-        (cfbot_config.RETENTION_ALL,),
-    )
-    cursor.execute(
-        """
-  delete from task_command
-   where task_id in (select task_id
-                       from task
-                      where build_id is null
-                        and created < now() - interval '1 day' * %s)""",
-        (cfbot_config.RETENTION_ALL,),
-    )
-    cursor.execute(
-        """
-  delete from highlight
-   where task_id in (select task_id
-                       from task
-                      where build_id is null
-                        and created < now() - interval '1 day' * %s)""",
-        (cfbot_config.RETENTION_ALL,),
-    )
-    cursor.execute(
-        """
-  delete from task
-   where build_id is null
-     and created < now() - interval '1 day' * %s""",
-        (cfbot_config.RETENTION_ALL,),
-    )
-    logging.info(
-        "garbage collected %d legacy tasks older than %d days",
-        cursor.rowcount,
-        cfbot_config.RETENTION_ALL,
-    )
-    conn.commit()
-
     # Trim old builds and dependent data in referential integrity order.
     cursor.execute(
         """
