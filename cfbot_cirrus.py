@@ -199,7 +199,22 @@ def fetch_task_commands(conn, task_id):
     cfbot_work_queue.insert_work_queue(cursor, "fetch-task-logs", task_id)
 
 
-PRE_EXECUTING_STATUSES = ("CREATED", "TRIGGERED", "SCHEDULED")
+# Sometimes we seem to miss a webhook in the early fast-changing moments, or
+# even receive two out of order.  Allow statuses to be skipped in limited cases
+# of early transitions where we know the only possible order.  This avoids some
+# unnecessary polling.
+
+
+def build_status_follows(a, b):
+    STATUSES = ("CREATED", "TRIGGERED", "EXECUTING")
+    return a in STATUSES and b in STATUSES and STATUSES.index(a) < STATUSES.index(b)
+
+
+def task_status_follows(a, b):
+    STATUSES = ("CREATED", "TRIGGERED", "SCHEDULED", "EXECUTING")
+    return a == b or (
+        a in STATUSES and b in STATUSES and STATUSES.index(a) < STATUSES.index(b)
+    )
 
 
 # Compute backoff.  Called when the current active build completes.
@@ -494,16 +509,15 @@ def ingest_webhook(conn, event_type, event):
                 #     build_status,
                 # )
                 return
-            elif existing_build_status == old_build_status or (
-                build_status == "EXECUTING"
-                and existing_build_status in PRE_EXECUTING_STATUSES
-                and old_build_status in PRE_EXECUTING_STATUSES
+            elif existing_build_status == old_build_status or build_status_follows(
+                existing_build_status, build_status
             ):
                 if existing_build_status != old_build_status:
                     logging.info(
-                        "webhook out of sync, build %s expected to have %s but it has %s, assuming dropped webhooks and allowing transition to %s",
+                        "webhook for build %s wanted %s -> %s but we have %s -> %s, allowing it...",
                         build_id,
                         old_build_status,
+                        build_status,
                         existing_build_status,
                         build_status,
                     )
@@ -600,12 +614,23 @@ def ingest_webhook(conn, event_type, event):
                 #     task_status,
                 # )
                 pass
-            elif existing_task_status == old_task_status:
-                # we have the expected old value, common case
+            elif existing_task_status == old_task_status or task_status_follows(
+                existing_task_status, task_status
+            ):
+                if existing_task_status != old_task_status:
+                    logging.info(
+                        "webhook for task %s wanted %s -> %s but we have %s -> %s, allowing it...",
+                        task_id,
+                        old_task_status,
+                        task_status,
+                        existing_task_status,
+                        task_status,
+                    )
+
                 process_new_task_status(
                     cursor,
                     task_id,
-                    old_task_status,
+                    existing_task_status,
                     task_status,
                     "webhook",
                     task_timestamp,
