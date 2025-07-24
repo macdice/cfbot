@@ -33,7 +33,7 @@ def insert_work_queue(cursor, type, key=None):
         (type, key),
     )
     (id,) = cursor.fetchone()
-    logging.info("work_queue insert: id = %d, type = %s, key = %s", id, type, key)
+    # logging.info("work_queue insert: id = %d, type = %s, key = %s", id, type, key)
     cursor.execute("notify work_queue")
 
 
@@ -98,7 +98,7 @@ def process_one_job(conn, fetch_only):
 
     setproctitle.setproctitle("cfbot worker: %s %s" % (type, key))
 
-    logging.info("work_queue begin:  id = %d, type = %s, key = %s", id, type, key)
+    # logging.info("work_queue begin:  id = %d, type = %s, key = %s", id, type, key)
     start_time = time.time()
 
     # dispatch to the right work handler
@@ -153,13 +153,13 @@ def process_one_job(conn, fetch_only):
         raise
 
     # if we made it this far without an error, this work item is done
-    logging.info(
-        "work_queue finish: id = %d, type = %s, key = %s, elapsed = %0.03fs",
-        id,
-        type,
-        key,
-        time.time() - start_time,
-    )
+    # logging.info(
+    #    "work_queue finish: id = %d, type = %s, key = %s, elapsed = %0.03fs",
+    #    id,
+    #    type,
+    #    key,
+    #    time.time() - start_time,
+    # )
     cursor.execute(
         """delete from work_queue
                        where id = %s""",

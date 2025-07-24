@@ -43,7 +43,7 @@ def cirrus_webhook():
     try:
         event_type = request.headers.get("X-Cirrus-Event")
         event = request.json
-        logging.info("Cirrus webhook: type = %s, payload = %s", event_type, event)
+        # logging.info("Cirrus webhook: type = %s, payload = %s", event_type, event)
         if event_type and "build" in event and "id" in event["build"]:
             cursor = conn.cursor()
             cfbot_cirrus.ingest_webhook(conn, event_type, event)

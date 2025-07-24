@@ -47,10 +47,10 @@ def run():
         # to stay in sync.
         for name, cf in cfs.items():
             if cf is None:
-                logging.info(f"skipping pulling submissions for {name} commitfest")
+                # logging.info(f"skipping pulling submissions for {name} commitfest")
                 continue
 
-            logging.info(f"pulling submissions for {name} commitfest")
+            # logging.info(f"pulling submissions for {name} commitfest")
             cfbot_commitfest.pull_submissions(conn, cf["id"])
 
         cf_ids = [cf["id"] for cf in cfs.values() if cf is not None]

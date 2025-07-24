@@ -371,7 +371,9 @@ def process_new_task_status(
     # log new/changed status, update if changed
     if old_task_status:
         assert old_task_status != task_status
-        logging.info("task %s %s -> %s", task_id, old_task_status, task_status)
+        logging.info(
+            "task %s %s -> %s [%s]", task_id, old_task_status, task_status, source
+        )
         cursor.execute(
             """update task
                              set status = %s,
@@ -380,7 +382,7 @@ def process_new_task_status(
             (task_status, task_id),
         )
     else:
-        logging.info("new task %s %s", task_id, task_status)
+        logging.info("new task %s %s [%s]", task_id, task_status, source)
         # caller inserted task
 
     # maintain the history of status changes
@@ -412,7 +414,9 @@ def process_new_build_status(
     # log new/changed status, update if changed
     if old_build_status:
         assert old_build_status != build_status
-        logging.info("build %s %s -> %s", build_id, old_build_status, build_status)
+        logging.info(
+            "build %s %s -> %s [%s]", build_id, old_build_status, build_status, source
+        )
         cursor.execute(
             """update build
                              set status = %s,
@@ -423,7 +427,7 @@ def process_new_build_status(
             (build_status, commit_id, branch_name, build_id),
         )
     else:
-        logging.info("new build %s %s", build_id, build_status)
+        logging.info("new build %s %s [%s]", build_id, build_status, source)
         # caller inserted build
 
     # maintain the history of status changes
@@ -460,18 +464,18 @@ def ingest_webhook(conn, event_type, event):
             (build_id, build_status, build_branch, commit_id),
         )
         if cursor.rowcount == 1:
-            if action != "created":
-                logging.info(
-                    "webhook out of sync, created build %s instead of updating",
-                    build_id,
-                )
+            # if action != "created":
+            #     logging.info(
+            #         "webhook out of sync, created build %s instead of updating",
+            #         build_id,
+            #     )
             process_new_build_status(
                 cursor, build_id, None, build_status, commit_id, build_branch, "webhook"
             )
         elif action == "created":
-            logging.info(
-                "webhook out of sync, build %s already exists, ignoring", build_id
-            )
+            # logging.info(
+            #     "webhook out of sync, build %s already exists, ignoring", build_id
+            # )
             return
         else:
             old_build_status = event["old_status"]
@@ -484,11 +488,11 @@ def ingest_webhook(conn, event_type, event):
             )
             (existing_build_status,) = cursor.fetchone()
             if existing_build_status == build_status:
-                logging.info(
-                    "webhook out of sync, build %s already has status %s, ignoring",
-                    build_id,
-                    build_status,
-                )
+                # logging.info(
+                #    "webhook out of sync, build %s already has status %s, ignoring",
+                #     build_id,
+                #     build_status,
+                # )
                 return
             elif existing_build_status == old_build_status or (
                 build_status == "EXECUTING"
@@ -590,11 +594,12 @@ def ingest_webhook(conn, event_type, event):
 
             if existing_task_status == task_status:
                 # already has that value, that's OK
-                logging.info(
-                    "webhook out of sync: task %s already has status %s",
-                    task_id,
-                    task_status,
-                )
+                # logging.info(
+                #     "webhook out of sync: task %s already has status %s",
+                #     task_id,
+                #     task_status,
+                # )
+                pass
             elif existing_task_status == old_task_status:
                 # we have the expected old value, common case
                 process_new_task_status(
@@ -647,7 +652,7 @@ def poll_stale_build(conn, build_id):
 
     # Network API call (regrettably while holding a lock...)
     build = get_build(build_id)
-    logging.info("Cirrus: %s", build)
+    # logging.info("Cirrus: %s", build)
 
     if not build:
         logging.info(

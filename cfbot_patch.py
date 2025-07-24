@@ -486,9 +486,10 @@ def maybe_process_one(conn, cf_ids):
         if submission_id:
             process_submission(conn, commitfest_id, submission_id)
     else:
-        logging.info(
-            "rate limiting in effect, see CONCURRENT_BUILDS in cfbot_config.py"
-        )
+        pass
+        # logging.info(
+        #     "rate limiting in effect, see CONCURRENT_BUILDS in cfbot_config.py"
+        # )
 
 
 if __name__ == "__main__":
