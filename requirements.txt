@@ -2,3 +2,4 @@ pg8000
 requests
 scipy
 ruff
+setproctitle

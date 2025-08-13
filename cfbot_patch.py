@@ -319,7 +319,11 @@ def reset_repo_to_good_master_commit(conn, repo_path):
                          AND status = 'COMPLETED'
                     ORDER BY created DESC
                        LIMIT 1""")
-    (good_commit_id,) = cursor.fetchone()
+    result = cursor.fetchone()
+    if result:
+        (good_commit_id,) = result
+    else:
+        good_commit_id = "origin/master"
 
     commit_id = get_commit_id(repo_path)
     if commit_id != good_commit_id:
@@ -328,7 +332,8 @@ def reset_repo_to_good_master_commit(conn, repo_path):
 
     reset_commit_id(repo_path, good_commit_id)
     commit_id = get_commit_id(repo_path)
-    assert commit_id == good_commit_id
+    if good_commit_id != "origin/master":
+        assert commit_id == good_commit_id
 
     return commit_id
 
@@ -494,5 +499,4 @@ def maybe_process_one(conn, cf_ids):
 
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
-        template_repo_path = patchburner_ctl("template-repo-path").strip()
-        print(reset_repo_to_good_master_commit(conn, template_repo_path))
+        process_submission(conn, int(sys.argv[1]), int(sys.argv[2]))

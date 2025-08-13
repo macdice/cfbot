@@ -49,7 +49,7 @@ On FreeBSD
 ## Run cfbot
 
 ```bash
-./cfbot.py
+./cfbot_periodic_minutely.py
 ```
 
 ## Debug a specific patch
