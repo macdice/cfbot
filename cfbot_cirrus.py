@@ -147,7 +147,7 @@ def poll_stale_branch(conn, branch_id):
             (branch_id,),
         )
         if cursor.rowcount == 1:
-            logging.info("branch %s testing -> timeout", branch_id, branch_status)
+            logging.info("branch %s testing -> timeout", branch_id)
             cfbot_work_queue.insert_work_queue_if_not_exists(
                 cursor, "post-branch-status", branch_id
             )
