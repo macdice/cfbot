@@ -86,3 +86,14 @@ Reset backoff from all submissions:
 ```sql
 UPDATE submission set backoff_until = NULL, last_backoff = NULL where backoff_until is not null;
 ```
+
+Check for old stuck runs:
+```sql
+\x auto
+SELECT * FROM branch WHERE status='testing';
+```
+
+Remove stuck run:
+```sql
+UPDATE branch SET status = 'failed' WHERE build_id = '<some build id>'
+```
