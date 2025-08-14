@@ -8,6 +8,7 @@ import re
 import unicodedata
 from html import escape as html_escape
 
+import cfbot_commitfest_rpc
 from cfbot_commitfest_rpc import Submission
 
 # Define SVG content
@@ -551,12 +552,12 @@ def unique_authors(submissions):
 if __name__ == "__main__":
     with cfbot_util.db() as conn:
         # rebuild(conn, commitfest_id)
-        # commitfest_id = cfbot_commitfest_rpc.get_current_commitfest_id()
-        submissions = load_submissions(conn, 42)
+        cfs = cfbot_commitfest_rpc.get_current_commitfests()
+        submissions = load_submissions(conn, cfs)
         build_page(
             conn,
             "x",
-            42,
+            cfs,
             submissions,
             None,
             None,
