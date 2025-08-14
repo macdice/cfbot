@@ -74,3 +74,15 @@ make lint-fix-unsafe
 # Run both "make format" and "make lint-fix-unsafe" (usually what you want)
 make fix
 ```
+
+# Useful production commands
+
+Restart all services:
+```bash
+supervisorctl restart cfbot_worker: cfbot_api
+```
+
+Reset backoff from all submissions:
+```sql
+UPDATE submission set backoff_until = NULL, last_backoff = NULL where backoff_until is not null;
+```
