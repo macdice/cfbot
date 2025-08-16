@@ -432,18 +432,17 @@ def process_new_build_status(
         logging.info(
             "build %s %s -> %s [%s]", build_id, old_build_status, build_status, source
         )
-        cursor.execute(
-            """update build
+    else:
+        logging.info("new build %s %s [%s]", build_id, build_status, source)
+    cursor.execute(
+        """update build
                              set status = %s,
                                  commit_id = coalesce(commit_id, %s),
                                  branch_name = coalesce(branch_name, %s),
                                  modified = now()
                            where build_id = %s""",
-            (build_status, commit_id, branch_name, build_id),
-        )
-    else:
-        logging.info("new build %s %s [%s]", build_id, build_status, source)
-        # caller inserted build
+        (build_status, commit_id, branch_name, build_id),
+    )
 
     # maintain the history of status changes
     cursor.execute(
