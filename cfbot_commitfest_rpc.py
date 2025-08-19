@@ -113,7 +113,7 @@ def get_submissions_for_commitfest(commitfest_id):
         if re.search("<tr>", line):
             td_count = 0
             continue
-        if re.search("<td>", line):
+        if re.search("<td[^>]*>", line):
             td_count += 1
 
         groups = re.search('<a href="/patch/([0-9]+)/">([^<]+)</a>', line)
@@ -121,18 +121,21 @@ def get_submissions_for_commitfest(commitfest_id):
             submission_id = groups.group(1)
             name = html.unescape(groups.group(2))
             continue
-        if td_count == 6:
+        if td_count == 8:
             groups = re.search("<td>([^<]*)</td>", line)
             if groups:
                 authors = groups.group(1)
                 authors = re.sub(" *\\([^)]*\\)", "", authors)
                 continue
-        groups = re.search(
-            '<td><span class="label label-[^"]*">([^<]+)</span></td>', line
-        )
-        if groups and not state:
-            state = groups.group(1)
-            continue
+        if td_count == 3:
+            groups = re.search(
+                '<td><span class="badge[^"]*">([^<]+)</span></td>',
+                line,
+                #            '<td><span class="label label-[^"]*">([^<]+)</span></td>', line
+            )
+            if groups and not state:
+                state = groups.group(1)
+                continue
         groups = re.search('<td style="white-space: nowrap;" title="([^"]+)">', line)
         if groups:
             latest_email = groups.group(1)
@@ -159,10 +162,10 @@ def get_current_commitfests():
 
 
 if __name__ == "__main__":
-    for name, cf in get_current_commitfests().items():
-        if not cf:
-            continue
-        for sub in get_submissions_for_commitfest(cf["id"]):
-            print(name, str(sub))
+    # for name, cf in get_current_commitfests().items():
+    #    if not cf:
+    #        continue
+    for sub in get_submissions_for_commitfest(55):
+        print(str(sub))
     #    print get_thread_url_for_submission(19, 1787)
     # print(get_latest_patches_from_thread_url(get_thread_url_for_submission(37, 2901)))
