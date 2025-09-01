@@ -44,10 +44,15 @@ def get_latest_patches_from_thread_url(thread_url):
             '<a href="(/message-id/attachment/[^"]*\\.(diff|diff\\.gz|patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2|zip))">',
             line,
         )
-        if groups and not groups.group(1).endswith("subtrans-benchmark.tar.gz"):
-            message_attachments.append("https://www.postgresql.org" + groups.group(1))
-            selected_message_attachments = message_attachments
-            selected_message_id = message_id
+        if groups and not groups.group(1):
+            attachment = groups.group(1)
+            if "/nocfbot" not in attachment and not attachment.endswith(
+                "subtrans-benchmark.tar.gz"
+            ):
+                message_attachments.append("https://www.postgresql.org" + attachment)
+                selected_message_attachments = message_attachments
+                selected_message_id = message_id
+
         # groups = re.search('<a name="([^"]+)"></a>', line)
         groups = re.search('<td><a href="/message-id/[^"]+">([^"]+)</a></td>', line)
         if groups:
