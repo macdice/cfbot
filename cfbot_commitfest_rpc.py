@@ -44,7 +44,7 @@ def get_latest_patches_from_thread_url(thread_url):
             '<a href="(/message-id/attachment/[^"]*\\.(diff|diff\\.gz|patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2|zip))">',
             line,
         )
-        if groups and not groups.group(1):
+        if groups:
             attachment = groups.group(1)
             if "/nocfbot" not in attachment and not attachment.endswith(
                 "subtrans-benchmark.tar.gz"
