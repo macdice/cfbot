@@ -83,7 +83,12 @@ def get_thread_url_for_submission(commitfest_id, submission_id):
     url = f"{cfbot_config.COMMITFEST_HOST}/patch/{submission_id}/"
     candidates = []
     candidate = None
-    for line in cfbot_util.slow_fetch(url).splitlines():
+    submission_page = cfbot_util.slow_fetch(url, none_for_404=True)
+
+    if submission_page is None:
+        return None
+
+    for line in submission_page.splitlines():
         groups = re.search(
             """Latest at <a href="https://www.postgresql.org/message-id/([^"]+)">(2[^<]+)""",
             line,
