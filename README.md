@@ -93,7 +93,12 @@ Check for old stuck runs:
 SELECT * FROM branch WHERE status='testing';
 ```
 
-Remove stuck run:
+Remove all runs that have been stuck for a while:
+```
+UPDATE branch SET status = 'failed' WHERE status='testing' and created < now() - interval '5 hours';
+```
+
+Remove a specific stuck run:
 ```sql
 UPDATE branch SET status = 'failed' WHERE build_id = '<some build id>'
 ```
