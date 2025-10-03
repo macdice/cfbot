@@ -91,11 +91,15 @@ Check for old stuck runs:
 ```sql
 \x auto
 SELECT * FROM branch WHERE status='testing';
+SELECT * FROM build WHERE created < now() - interval '5 hours' AND status='EXECUTING';
+SELECT * FROM task  WHERE created < now() - interval '5 hours' AND status not in ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED');
 ```
 
 Remove all runs that have been stuck for a while:
-```
+```sql
 UPDATE branch SET status = 'failed' WHERE status='testing' and created < now() - interval '5 hours';
+UPDATE build SET status = 'FAILED' WHERE created < now() - interval '5 hours' AND status='EXECUTING';
+UPDATE task SET status = 'FAILED' WHERE created < now () - interval '5 hours' AND status not in ('FAILED', 'ABORTED', 'ERRORED', 'COMPLETED');
 ```
 
 Remove a specific stuck run:
