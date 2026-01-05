@@ -82,6 +82,11 @@ Restart all services:
 supervisorctl restart cfbot_worker: cfbot_api
 ```
 
+Copy cfbot_patchburner.ctl to prod location (not automated):
+```bash
+sudo cp /home/cfbot/cfbot/cfbot_patchburner_ctl.sh /usr/local/sbin/cfbot_patchburner_ctl.sh
+```
+
 Reset backoff from all submissions:
 ```sql
 UPDATE submission set backoff_until = NULL, last_backoff = NULL where backoff_until is not null;
