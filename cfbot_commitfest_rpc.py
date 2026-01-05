@@ -31,6 +31,18 @@ class Submission:
         )
 
 
+def url_looks_like_patch(url):
+    return "/nocfbot" not in url and re.match(
+        r"https://.*\.(diff|patch)(\.gz|\.bz2)?$", url
+    )
+
+
+def url_looks_like_patch_tarball(url):
+    return "/nocfbot" not in url and re.match(
+        r"https://.*\.(tar|tgz|tar\.gz|tar\.bz2|zip)$", url
+    )
+
+
 def get_latest_patches_from_thread_url(thread_url):
     """Given a 'whole thread' URL from the archives, find the last message that
     had at least one attachment called something.patch.  Return the message
@@ -41,34 +53,52 @@ def get_latest_patches_from_thread_url(thread_url):
     message_id = None
     for line in cfbot_util.slow_fetch(thread_url).splitlines():
         groups = re.search(
-            '<a href="(/message-id/attachment/[^"]*\\.(diff|diff\\.gz|patch|patch\\.gz|tar\\.gz|tgz|tar\\.bz2|zip))">',
+            '<a href="(/message-id/attachment/[^"]*)">',
             line,
         )
         if groups:
             attachment = groups.group(1)
-            if "/nocfbot" not in attachment and not attachment.endswith(
-                "subtrans-benchmark.tar.gz"
-            ):
-                message_attachments.append("https://www.postgresql.org" + attachment)
+            url = "https://www.postgres.org" + attachment
+            if url_looks_like_patch(url) or url_looks_like_patch_tarball(url):
+                message_attachments.append(url)
                 selected_message_attachments = message_attachments
                 selected_message_id = message_id
 
-        # groups = re.search('<a name="([^"]+)"></a>', line)
+        # start of a new message?
         groups = re.search('<td><a href="/message-id/[^"]+">([^"]+)</a></td>', line)
         if groups:
             message_id = groups.group(1)
             message_attachments = []
-    # if there is a tarball attachment, there must be only one attachment,
-    # otherwise give up on this thread (we don't know how to combine patches and
-    # tarballs)
+
     if selected_message_attachments is not None:
         if any(
-            x.endswith(".tgz") or x.endswith(".tar.gz") or x.endswith(".tar.bz2")
-            for x in selected_message_attachments
+            url_looks_like_patch_tarball(url) for url in selected_message_attachments
         ):
-            if len(selected_message_attachments) > 1:
+            # there is a tarball.  we don't actually know if it contains any
+            # patches (rather than, say, benchmark results).  this is stupid,
+            # but we'll try to guess...
+            #
+            # XXX the basic problem here is that we can't peek into the
+            # tarballs and see if they contain patches, which is a bit sad;
+            # perhaps we should just take everything, and teach the patch
+            # burner script to examine everything and fail with a special
+            # result code for 'nothing to do here' if it can't find any
+            # patches?  the point of that would be to avoid running any code
+            # that downloads and unpacks stuff outside the container, since we
+            # don't really have enough information here but also don't want to
+            # touch untrusted data here
+            if any(url_looks_like_patch(url) for url in selected_message_attachments):
+                # mixture of tarballs and patches, keep only the patches (not
+                # great as it would be nice to be able to post a tarball + an
+                # extra plain patch)
+                selected_message_attachments = list(
+                    filter(url_looks_like_patch, selected_message_attachments)
+                )
+            elif len(selected_message_attachments) > 1:
+                # tarball-only, multi-tarball messages not currently supported
                 selected_message_id = None
                 selected_message_attachments = None
+
     # if there are multiple patch files, they had better follow the convention
     # of leading numbers, otherwise we don't know how to apply them in the right
     # order
@@ -172,10 +202,9 @@ def get_current_commitfests():
 
 
 if __name__ == "__main__":
-    # for name, cf in get_current_commitfests().items():
-    #    if not cf:
-    #        continue
-    for sub in get_submissions_for_commitfest(55):
-        print(str(sub))
-    #    print get_thread_url_for_submission(19, 1787)
-    # print(get_latest_patches_from_thread_url(get_thread_url_for_submission(37, 2901)))
+    # test case
+    print(
+        get_latest_patches_from_thread_url(
+            "https://www.postgresql.org/message-id/flat/CAApHDvrF6DG7=xD8JGo2HoQKN0LRFNF0ysVt6cKSNPiqbdQOSA@mail.gmail.com"
+        )
+    )
