@@ -65,10 +65,10 @@ destroy_patchburner_if_exists() {
 		ezjail-admin delete -f $JAIL_NAME
 	fi
 	if zfs list $ZFS_NAME >/dev/null 2>&1; then
-		zfs destroy -f $ZFS_NAME
+		zfs destroy -rf $ZFS_NAME
 	fi
 	if zfs list $TEMPLATE_ZFS_NAME@mysnapshot >/dev/null 2>&1; then
-		zfs destroy -f $TEMPLATE_ZFS_NAME@mysnapshot
+		zfs destroy -rf $TEMPLATE_ZFS_NAME@mysnapshot
 	fi
 }
 
