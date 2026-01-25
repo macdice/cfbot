@@ -1,13 +1,11 @@
 #!/usr/bin/env python
 #
 # Routines that interface with the Commitfest app.
-# For now these use webscraping, but they could become real API calls.
+
+from datetime import datetime
 
 import cfbot_config
 import cfbot_util
-import html
-
-# from html.parser import HTMLParser
 import re
 
 
@@ -108,89 +106,46 @@ def get_latest_patches_from_thread_url(thread_url):
 def get_thread_url_for_submission(commitfest_id, submission_id):
     """Given a Commitfest ID and a submission ID, return the URL of the 'whole
     thread' page in the mailing list archives."""
-    # find all the threads and latest message times
-    result = None
-    url = f"{cfbot_config.COMMITFEST_HOST}/patch/{submission_id}/"
-    candidates = []
-    candidate = None
-    submission_page = cfbot_util.slow_fetch(url, none_for_404=True)
+    url = f"{cfbot_config.COMMITFEST_HOST}/api/v1/patches/{submission_id}/threads"
+    data = cfbot_util.slow_fetch_json(url, none_for_404=True)
 
-    if submission_page is None:
+    if data is None:
         return None
 
-    for line in submission_page.splitlines():
-        groups = re.search(
-            """Latest at <a href="https://www.postgresql.org/message-id/([^"]+)">(2[^<]+)""",
-            line,
-        )
-        if groups:
-            candidate = (groups.group(2), groups.group(1))
-        # we'll only take threads that are followed by evidence that there is at least one attachment
-        groups = re.search("""Latest attachment .* <button type="button" """, line)
-        if groups:
-            candidates.append(candidate)
-    # take the one with the most recent email
-    if len(candidates) > 0:
-        candidates.sort()
-        result = "https://www.postgresql.org/message-id/flat/" + candidates[-1][1]
-    return result
+    # Filter to threads that have attachments, then pick the one with the most
+    # recent message
+    candidates = [
+        (t["latest_message_time"], t["messageid"])
+        for t in data["threads"]
+        if t["has_attachment"]
+    ]
+
+    if not candidates:
+        return None
+
+    candidates.sort()
+    return "https://www.postgresql.org/message-id/flat/" + candidates[-1][1]
 
 
 def get_submissions_for_commitfest(commitfest_id):
     """Given a Commitfest ID, return a list of Submission objects."""
-    result = []
-    # parser = HTMLParser()
-    url = f"{cfbot_config.COMMITFEST_HOST}/{commitfest_id}/"
-    state = None
-    latest_email = None
-    authors = ""
-    td_count = 0
-    body = cfbot_util.slow_fetch(url, True)
-    if body is None:
-        return []
-    for line in body.splitlines():
-        # maybe it's easier to count rows and columns
-        if re.search("<tr>", line):
-            td_count = 0
-            continue
-        if re.search("<td[^>]*>", line):
-            td_count += 1
+    url = f"{cfbot_config.COMMITFEST_HOST}/api/v1/commitfests/{commitfest_id}/patches"
+    data = cfbot_util.slow_fetch_json(url, none_for_404=True)
 
-        groups = re.search('<a href="/patch/([0-9]+)/">([^<]+)</a>', line)
-        if groups:
-            submission_id = groups.group(1)
-            name = html.unescape(groups.group(2))
-            continue
-        if td_count == 8:
-            groups = re.search("<td>([^<]*)</td>", line)
-            if groups:
-                authors = groups.group(1)
-                authors = re.sub(" *\\([^)]*\\)", "", authors)
-                continue
-        if td_count == 3:
-            groups = re.search(
-                '<td><span class="badge[^"]*">([^<]+)</span></td>',
-                line,
-                #            '<td><span class="label label-[^"]*">([^<]+)</span></td>', line
-            )
-            if groups and not state:
-                state = groups.group(1)
-                continue
-        groups = re.search('<td style="white-space: nowrap;" title="([^"]+)">', line)
-        if groups:
-            latest_email = groups.group(1)
-            result.append(
-                Submission(
-                    submission_id,
-                    commitfest_id,
-                    name,
-                    state,
-                    authors.split(", "),
-                    latest_email,
-                )
-            )
-            state = None
-    return result
+    if data is None:
+        return []
+
+    return [
+        Submission(
+            p["id"],
+            commitfest_id,
+            p["name"],
+            p["status"],
+            p["authors"],
+            p["last_email_time"],
+        )
+        for p in data["patches"]
+    ]
 
 
 def get_current_commitfests():

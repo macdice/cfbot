@@ -29,7 +29,7 @@ def pull_submissions(conn, commitfest_id):
                          AND name = %s
                          AND status = %s
                          AND authors = %s
-                         AND last_email_time = %s AT TIME ZONE 'UTC'""",
+                         AND last_email_time = %s""",
             (
                 commitfest_id,
                 submission.id,
@@ -49,7 +49,7 @@ def pull_submissions(conn, commitfest_id):
             """INSERT INTO submission (commitfest_id, submission_id,
                                               name, status, authors,
                                               last_email_time)
-                      VALUES (%s, %s, %s, %s, %s, %s AT TIME ZONE 'UTC')
+                      VALUES (%s, %s, %s, %s, %s, %s)
                  ON CONFLICT (commitfest_id, submission_id) DO
                       UPDATE
                       SET name = EXCLUDED.name,
