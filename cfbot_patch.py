@@ -390,17 +390,21 @@ def process_submission(conn, commitfest_id, submission_id):
     output, rcode = patchburner_ctl("apply", want_rcode=True)
     # write the patch output to a public log file
     log_file = f"patch_{submission_id}.log"
+    log_content = (
+        "=== Applying patches on top of PostgreSQL commit ID %s ===\n" % (commit_id,)
+        + output
+    )
     with open(os.path.join(cfbot_config.WEB_ROOT, log_file), "w+") as f:
-        f.write(
-            "=== Applying patches on top of PostgreSQL commit ID %s ===\n"
-            % (commit_id,)
-        )
-        f.write(output)
+        f.write(log_content)
     log_url = cfbot_config.CFBOT_APPLY_URL % log_file
     # did "patch" actually succeed?
     if rcode != 0:
         # we failed to apply the patches
-        logging.info("failed to apply (%s, %s)" % (commitfest_id, submission_id))
+        logging.info("failed to apply (%s, %s) rcode=%s" % (commitfest_id, submission_id, rcode))
+        with open("apply_failures.log", "a") as f:
+            f.write(f"=== Failed to apply submission {submission_id} (commitfest {commitfest_id}) at {time.strftime('%Y-%m-%d %H:%M:%S')} rcode={rcode} ===\n")
+            f.write(log_content)
+            f.write("\n")
         cursor.execute(
             """INSERT INTO branch (commitfest_id, submission_id, status, url, created, modified) VALUES (%s, %s, 'failed', %s, now(), now()) RETURNING id""",
             (commitfest_id, submission_id, log_url),
