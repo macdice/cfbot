@@ -401,7 +401,12 @@ def process_submission(conn, commitfest_id, submission_id):
     if rcode != 0:
         # we failed to apply the patches
         tail = "\n".join(output.rstrip().split("\n")[-3:])
-        logging.info("failed to apply (%s, %s) rcode=%s\n%s" % (commitfest_id, submission_id, rcode, tail))
+        logging.info(
+            "failed to apply (%s, %s) rcode=%s\n%s"
+            % (commitfest_id, submission_id, rcode, tail)
+        )
+        if submission_id == 4351:  # Peter Geoghegan's problematic patch
+            logging.info("full apply log for submission 4351:\n%s" % output)
         cursor.execute(
             """INSERT INTO branch (commitfest_id, submission_id, status, url, created, modified) VALUES (%s, %s, 'failed', %s, now(), now()) RETURNING id""",
             (commitfest_id, submission_id, log_url),
