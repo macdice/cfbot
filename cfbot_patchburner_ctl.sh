@@ -151,8 +151,7 @@ for f in $(cd /work/patches && find . -name '*.patch' -o -name '*.diff' | sort);
 	# with the next patch if it succeeds.
 	git am --3way "/work/patches/$f" && continue
 	# Okay it failed, let's clean up and try the next option.
-	git reset HEAD .
-	git checkout -- .
+	git am --abort
 	git clean -fdx
 	echo "=== using patch(1) to apply patch $f ==="
 	if ! ($PATCH_CMD -p1 --no-backup-if-mismatch -V none -f -N <"/work/patches/$f" && git add .); then
