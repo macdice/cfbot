@@ -400,11 +400,8 @@ def process_submission(conn, commitfest_id, submission_id):
     # did "patch" actually succeed?
     if rcode != 0:
         # we failed to apply the patches
-        logging.info("failed to apply (%s, %s) rcode=%s" % (commitfest_id, submission_id, rcode))
-        with open("apply_failures.log", "a") as f:
-            f.write(f"=== Failed to apply submission {submission_id} (commitfest {commitfest_id}) at {time.strftime('%Y-%m-%d %H:%M:%S')} rcode={rcode} ===\n")
-            f.write(log_content)
-            f.write("\n")
+        tail = "\n".join(output.rstrip().split("\n")[-3:])
+        logging.info("failed to apply (%s, %s) rcode=%s\n%s" % (commitfest_id, submission_id, rcode, tail))
         cursor.execute(
             """INSERT INTO branch (commitfest_id, submission_id, status, url, created, modified) VALUES (%s, %s, 'failed', %s, now(), now()) RETURNING id""",
             (commitfest_id, submission_id, log_url),
