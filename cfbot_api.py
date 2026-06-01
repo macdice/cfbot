@@ -1,4 +1,4 @@
-import cfbot_cirrus
+import cfbot_github
 import cfbot_config
 import cfbot_util
 import logging
@@ -28,25 +28,22 @@ def error_cleanup():
 app = Flask("cfbot_api")
 
 
-# This URL is registered with with cirrus so it calls us any time a build
-# begins or a status changes:
-#
-# https://cirrus-ci.org/api/#builds-and-tasks-webhooks
-#
-# We extract commit_id:task_id and create a work_queue entry for later
-# processing.
-#
-# XXX Should we process the status change immediately in this transaction?
-#
-@app.route("/api/cirrus-webhook", methods=["POST"])
-def cirrus_webhook():
+# This URL is registered with Github to receive workflow_job events,
+# from both postgresql-cfbot/postgres (for cf/* branches) and
+# postgres/postgres (for master, REL_* branches).
+@app.route("/api/github-webhook", methods=["POST"])
+def github_webhook():
     try:
-        event_type = request.headers.get("X-Cirrus-Event")
+        event_type = request.headers.get("X-Github-Event")
         event = request.json
-        # logging.info("Cirrus webhook: type = %s, payload = %s", event_type, event)
-        if event_type and "build" in event and "id" in event["build"]:
-            cursor = conn.cursor()
-            cfbot_cirrus.ingest_webhook(conn, event_type, event)
+        logging.info("Github webhook: type = %s, payload = %s", event_type, event)
+        if event_type == "workflow_job":
+            cfbot_github.ingest_workflow_job(conn, event)
+            conn.commit()
+            return "OK"
+        elif event_type == "workflow_run":
+            # XXX Not used yet...
+            cfbot_github.ingest_workflow_run(conn, event)
             conn.commit()
             return "OK"
         else:
@@ -142,3 +139,8 @@ def rerun_patch():
     conn.commit()
 
     return jsonify({"status": "success"})
+
+
+# Easy way to run this locally for development.
+if __name__ == "__main__":
+    app.run(debug=True)

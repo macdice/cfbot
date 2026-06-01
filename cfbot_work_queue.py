@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-import cfbot_cirrus
 import cfbot_commitfest
 import cfbot_config
+import cfbot_github
 import cfbot_highlights
 import cfbot_util
 import re
@@ -103,12 +103,14 @@ def process_one_job(conn, fetch_only):
 
     # dispatch to the right work handler
     try:
+        # Processing logs
+        # XXX All of these need to be re-implemented for Github!
         if type == "fetch-task-logs":
             cfbot_highlights.fetch_task_logs(conn, key)
         elif type == "ingest-task-logs":
             cfbot_highlights.ingest_task_logs(conn, key)
-        elif type == "fetch-task-commands":
-            cfbot_cirrus.fetch_task_commands(conn, key)
+        # elif type == "fetch-task-commands":
+        #    cfbot_cirrus.fetch_task_commands(conn, key)
         elif type == "fetch-task-artifacts":
             cfbot_highlights.fetch_task_artifacts(conn, key)
         elif type == "ingest-task-artifacts":
@@ -117,10 +119,14 @@ def process_one_job(conn, fetch_only):
             cfbot_highlights.analyze_task_tests(conn, key)
         elif type == "refresh-highlight-pages":
             cfbot_highlights.refresh_highlight_pages(conn, key)
-        elif type == "poll-stale-branch":
-            cfbot_cirrus.poll_stale_branch(conn, key)
-        elif type == "poll-stale-build":
-            cfbot_cirrus.poll_stale_build(conn, key)
+        # Pulling data from the Github API
+        elif type == "poll-github-commit":
+            cfbot_github.poll_github_commit(conn, key)
+        elif type == "poll-github-run":
+            cfbot_github.poll_github_run(conn, key)
+        elif type == "poll-github-run-on-webhook":
+            cfbot_github.poll_github_run_on_webhook(conn, key)
+        # Notifying the Commitfest app
         elif type == "post-task-status":
             cfbot_commitfest.post_task_status(conn, key)
         elif type == "post-branch-status":

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-import cfbot_cirrus
-
 import cfbot_commitfest
 import cfbot_commitfest_rpc
 import cfbot_config
+import cfbot_github
 import cfbot_patch
 import cfbot_util
 import cfbot_web
@@ -35,9 +34,9 @@ def run():
 
         # Look for stuck builds, in case have missed a webhook or it is time to
         # time out.
-        cfbot_cirrus.check_stale_branches(conn)
-        cfbot_cirrus.check_stale_builds(conn)
-        cfbot_cirrus.check_stale_tasks(conn)
+        cfbot_github.check_stale_branches(conn)
+        cfbot_github.check_stale_builds(conn)
+        cfbot_github.check_stale_tasks(conn)
         conn.commit()
 
         # XXX We should get this information by receiving a POST from the

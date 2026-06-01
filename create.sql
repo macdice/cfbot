@@ -115,6 +115,7 @@ ALTER SEQUENCE public.branch_id_seq OWNED BY public.branch.id;
 
 CREATE TABLE public.build (
     build_id text NOT NULL,
+    repo text,
     branch_name text,
     status text,
     commit_id text,
