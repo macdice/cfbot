@@ -503,7 +503,7 @@ def poll_run(conn, repo, run_id, run_attempt, source):
                     task_id,
                     old_task_status,
                     task_status,
-                    "poll",
+                    source,
                     task_timestamp,
                 )
         else:
