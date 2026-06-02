@@ -1,23 +1,32 @@
 #!/usr/bin/env python3
 #
-# Cfbot uses terminology inherited from the defunct Cirrus CI API, but
-# there is a one-to-one mapping of concepts with Github's model:
+# Cfbot uses terminology inherited from the defunct Cirrus CI API, and
+# we have to do a bit of key swizzling to map the concepts to Github's
+# model:
 #
 # * build ~= GH [workflow] run (eg run triggered by commit, usually
 #   there is only one per commit unless it is re-run for some reason,
-#   as was the case with Cirrus).  Since GH uses the *same* run ID for
-#   re-runs, we also append the "attempt" number, separated by ".".
-#   We don't usually expect more than one run at a time for a given
-#   commit, and the ID of the most recent build is in branch.build_id.
+#   as was the case with Cirrus).  Unfortunately run_id is not
+#   globally unique (as Cirrus's was), so build_id is a string of the
+#   form repo:run_id.run_attempt.
+#
+#   XXX Surrogate key?
 #
 # * task ~= GH job (eg Windows, Linux, ... being the individual tasks
-#   of in a build)
+#   of in a build), but again job_id is not globally unique so task_id
+#   is a string of the form repo:job_id.
 #
-# * task_command ~= GH job step (eg configure, build, test, ...)
+#   XXX Surrogate key?
 #
-# Even though the IDs of the above are all integers, we process them
-# as strings for future-proofing anticipating future alternative
-# providers.
+#   XXX Note that the cfapp doesn't really need the repo: prefix
+#   because it only cares about tasks in postgresql-cfbot/postgresql,
+#   but for now at least it seems simpler to have just one kind of
+#   task ID across the two systems.  Cfbot has to deal with
+#   postgres/postgres tasks too, and the job_id part might collide.
+#
+# * task_command ~= GH job step (eg configure, build, test, ...).
+#
+#   XXX Not implemented yet...
 #
 # Cfbot builds and tasks have a single "status" inherited from Cirrus,
 # with upper case values.  GH has two fields "status" and "conclusion"
@@ -98,6 +107,25 @@ def convert_github_status_and_conclusion(status, conclusion):
             return "COMPLETED"  # ???
     # unrecognized!  use verbatim until we can add a missing case...
     return status + ":" + conclusion
+
+
+def make_build_id(repo, run_id, run_attempt):
+    return repo + ":" + str(run_id) + "." + str(run_attempt)
+
+
+def split_build_id(build_id):
+    repo, rest = build_id.split(":")
+    run_id, run_attempt = rest.split(".")
+    return repo, run_id, run_attempt
+
+
+def make_task_id(repo, job_id):
+    return repo + ":" + str(job_id)
+
+
+def split_task_id(task_id):
+    repo, job_id = task_id.split(":")
+    return repo, job_id
 
 
 # Sends a GET request to the Github API and returns the resulting JSON
@@ -376,10 +404,7 @@ def process_new_build_status(
 # relating to this build (run) or a task (job) it contains.
 def poll_run(conn, repo, run_id, run_attempt, source):
 
-    # What we call a build ID is really (run ID, run attempt).  The
-    # run ID doesn't change when a workflow is re-run, it just gets a
-    # new attempt number.
-    build_id = run_id + "." + run_attempt
+    build_id = make_build_id(repo, run_id, run_attempt)
 
     # What triggered this.  This is only used so that the
     # (build|task)_status_history table can show when webhooks were
@@ -391,10 +416,10 @@ def poll_run(conn, repo, run_id, run_attempt, source):
     # Serialise the API calls about this build by making sure we have a row to
     # lock first.
     cursor.execute(
-        """INSERT INTO build (build_id, repo, created, modified)
-           VALUES (%s, %s, now(), now())
+        """INSERT INTO build (build_id, created, modified)
+           VALUES (%s, now(), now())
       ON CONFLICT DO NOTHING""",
-        (build_id, repo),
+        (build_id,),
     )
     inserted = cursor.rowcount > 0
     cursor.execute(
@@ -411,7 +436,6 @@ def poll_run(conn, repo, run_id, run_attempt, source):
         repo, "runs/" + run_id + "/attempts/" + run_attempt, none_for_404=True
     )
 
-    print(json.dumps(build))
     if not build:
         logging.info(
             "Github does not know workflow run %s, existing status %s",
@@ -447,7 +471,7 @@ def poll_run(conn, repo, run_id, run_attempt, source):
     # Upsert the tasks.
     position = 0
     for task in tasks:
-        task_id = task["id"]
+        task_id = make_task_id(repo, task["id"])
         task_name = task["name"]
         task_status = convert_github_status_and_conclusion(
             task["status"], task["conclusion"]
@@ -530,9 +554,10 @@ def poll_commit(conn, repo, commit_id):
     cursor = conn.cursor()
     runs = get_github_api(repo, "runs", params={"head_sha": commit_id})
     for run in runs["workflow_runs"]:
-        build_id = str(run["id"]) + "." + str(run["run_attempt"])
-        key = repo + ":" + build_id
-        cfbot_work_queue.insert_work_queue_if_not_exists(cursor, "poll-github-run", key)
+        build_id = make_build_id(repo, run["id"], run["run_attempt"])
+        cfbot_work_queue.insert_work_queue_if_not_exists(
+            cursor, "poll-github-run", build_id
+        )
 
 
 # ======================================================================
@@ -600,7 +625,6 @@ def check_stale_builds(conn):
                                           avg_elapsed + stddev_elapsed * 3 as elapsed_p99
                                      from build_status_statistics),
                            run as (select build_id,
-                                          repo,
                                           status,
                                           branch_name,
                                           case
@@ -611,7 +635,6 @@ def check_stale_builds(conn):
                                      from build
                                     where build_status_running(status))
                       select run.build_id,
-                             run.repo,
                              run.reference_branch,
                              run.branch_name,
                              run.status,
@@ -622,7 +645,6 @@ def check_stale_builds(conn):
                        where run.elapsed > COALESCE(elapsed_p99, interval '30 minutes')""")
     for (
         build_id,
-        build_repo,
         reference_branch,
         branch_name,
         build_status,
@@ -647,7 +669,7 @@ def check_stale_builds(conn):
                 reference_branch,
             )
         cfbot_work_queue.insert_work_queue_if_not_exists(
-            cursor, "poll-github-run", build_repo + ":" + build_id
+            cursor, "poll-github-run", build_id
         )
 
 
@@ -663,8 +685,7 @@ def check_stale_tasks(conn):
                                           status,
                                           avg_elapsed + stddev_elapsed * 3 as elapsed_p99
                                      from task_status_statistics),
-                           run as (select build.repo,
-                                          task.task_id,
+                           run as (select task.task_id,
                                           task.build_id,
                                           task.task_name,
                                           task.status,
@@ -676,8 +697,7 @@ def check_stale_tasks(conn):
                                           now() - task.modified as elapsed
                                      from task join build using (build_id)
                                     where task_status_running(task.status))
-                      select run.repo,
-                             run.task_id,
+                      select run.task_id,
                              run.build_id,
                              run.reference_branch,
                              run.branch_name,
@@ -689,7 +709,6 @@ def check_stale_tasks(conn):
                    left join ref on ((run.reference_branch, run.task_name, run.status) = (ref.branch_name, ref.task_name, ref.status))
                        where run.elapsed > COALESCE(elapsed_p99, interval '30 minutes')""")
     for (
-        build_repo,
         task_id,
         build_id,
         reference_branch,
@@ -718,7 +737,7 @@ def check_stale_tasks(conn):
                 reference_branch,
             )
         cfbot_work_queue.insert_work_queue_if_not_exists(
-            cursor, "poll-github-run", build_repo + ":" + build_id
+            cursor, "poll-github-run", build_id
         )
 
 
@@ -791,10 +810,9 @@ def ingest_workflow_job(conn, event):
     repo = event["repository"]["full_name"]
     run_id = event["workflow_job"]["run_id"]
     run_attempt = event["workflow_job"]["run_attempt"]
-    build_id = str(run_id) + "." + str(run_attempt)
-    key = repo + ":" + build_id
+    build_id = make_build_id(repo, run_id, run_attempt)
     cfbot_work_queue.insert_work_queue_if_not_exists(
-        cursor, "poll-github-run-on-webhook", key
+        cursor, "poll-github-run-on-webhook", build_id
     )
 
 
@@ -815,8 +833,7 @@ def poll_github_commit(conn, key):
 def poll_github_run(conn, key):
     # Enqueued by check_stale_builds() when we haven't heard any news
     # about a build for a statistically unlikely period of time.
-    repo, build_id = key.split(":")
-    run_id, run_attempt = build_id.split(".")
+    repo, run_id, run_attempt = split_build_id(key)
     poll_run(conn, repo, run_id, run_attempt, "poll")
 
 
@@ -824,8 +841,7 @@ def poll_github_run(conn, key):
 def poll_github_run_on_webhook(conn, key):
     # Enqueued by ingest_workflow_job() when we receive a webhook
     # poke from Github.
-    repo, build_id = key.split(":")
-    run_id, run_attempt = build_id.split(".")
+    repo, run_id, run_attempt = split_build_id(key)
     poll_run(conn, repo, run_id, run_attempt, "webhook")
 
 
