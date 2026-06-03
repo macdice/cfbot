@@ -397,7 +397,7 @@ def ingest_build(conn, build_id, commit_id, branch_name, build_status, source):
     update_branch(cursor, build_id, build_status, commit_id, branch_name)
 
 
-def ingest_task(conn, build_id, task_id, task_status, task_name, position, source):
+def ingest_task(conn, build_id, task_id, task_status, task_name, source):
     repo, run_id, run_attempt = split_build_id(build_id)
     repo, job_id = split_task_id(task_id)
     task_html_url = (
@@ -417,6 +417,30 @@ def ingest_task(conn, build_id, task_id, task_status, task_name, position, sourc
             cursor, "poll-github-run", build_id
         )
         return
+
+    # XXX Attempt to create a stable sort order.  I don't know if this
+    # strategy will actually work...  it would be nice to be able to
+    # use the order of jobs declared in the .yml file, without parsing
+    # it...  let's see if job_id is allocated sequentially and with
+    # suitable control flow...
+    cursor.execute(
+        """SELECT task_id, position
+                        FROM task
+                       WHERE build_id = %s
+                       LIMIT 1""",
+        (build_id,),
+    )
+    if row := cursor.fetchone():
+        # Compute relative ordering assuming that job IDs are assigned
+        # sequentially.  We can't use the job ID directly as they are
+        # too big for int!
+        reference_task_id, reference_position = row
+        _, reference_job_id = split_task_id(reference_task_id)
+        position = int(job_id) - int(reference_job_id)
+    else:
+        # The first job we hear about is given position 0
+        position = 0
+
     cursor.execute(
         """INSERT INTO task (task_id,
                              build_id,
@@ -489,15 +513,13 @@ def poll_workflow_run(conn, repo, run_id, run_attempt):
     jobs = get_github_api(
         repo, "runs/" + run_id + "/attempts/" + run_attempt + "/jobs"
     )["jobs"]
-    position = 0
     for job in jobs:
         task_id = make_task_id(repo, job["id"])
         task_name = job["name"]
         task_status = convert_github_status_and_conclusion(
             job["status"], job["conclusion"]
         )
-        position += 1
-        ingest_task(conn, build_id, task_id, task_status, task_name, position, "poll")
+        ingest_task(conn, build_id, task_id, task_status, task_name, "poll")
 
 
 # Find out about all runs associated with a repo + commit ID.
@@ -775,8 +797,7 @@ def ingest_workflow_job(conn, event):
     status = event["workflow_job"]["status"]
     conclusion = event["workflow_job"]["conclusion"]
     task_status = convert_github_status_and_conclusion(status, conclusion)
-    position = 0  # ???
-    ingest_task(conn, build_id, task_id, task_status, task_name, position, "webhook")
+    ingest_task(conn, build_id, task_id, task_status, task_name, "webhook")
 
 
 # ======================================================================
