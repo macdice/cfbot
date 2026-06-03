@@ -231,6 +231,7 @@ WITH task_positions AS (SELECT DISTINCT ON (task.task_name)
                       ORDER BY task.task_name, task.modified DESC)
      SELECT task_id,
             task_name,
+            html_url,
             age,
             status,
             status IS DISTINCT FROM prev_status AS is_new
@@ -241,8 +242,7 @@ WITH task_positions AS (SELECT DISTINCT ON (task.task_name)
     """,
             (commit_id, commit_id, commit_id, submission_id),
         )
-        for task_id, task_name, age, status, is_new in cursor.fetchall():
-            url = "https://cirrus-ci.com/task/" + task_id
+        for task_id, task_name, url, age, status, is_new in cursor.fetchall():
             r = BuildResult(task_name, status, url, False, None, True, age)
             r.new = is_new
             submission.build_results.append(r)
