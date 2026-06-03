@@ -72,4 +72,4 @@ def post(url, d):
 
 def db():
     """Get a database connection."""
-    return pg8000.connect(cfbot_config.DSN)
+    return pg8000.connect("tmunro", database="cfbot_dev")
