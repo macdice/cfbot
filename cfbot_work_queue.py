@@ -124,8 +124,6 @@ def process_one_job(conn, fetch_only):
             cfbot_github.poll_github_commit(conn, key)
         elif type == "poll-github-run":
             cfbot_github.poll_github_run(conn, key)
-        elif type == "poll-github-run-on-webhook":
-            cfbot_github.poll_github_run_on_webhook(conn, key)
         # Notifying the Commitfest app
         elif type == "post-task-status":
             cfbot_commitfest.post_task_status(conn, key)
