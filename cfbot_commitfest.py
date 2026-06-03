@@ -177,15 +177,23 @@ def make_branch_status_message(conn, branch_id=None, build_id=None, commit_id=No
 def make_task_status_message(conn, task_id):
     cursor = conn.cursor()
     cursor.execute(
-        """SELECT build_id, build.commit_id, task.task_name, task.position, task.status, task.created, task.modified
+        """SELECT build_id, build.commit_id, task.task_name, task.position, task.status, task.html_url, build.html_url, task.created, task.modified
                       FROM task
                       JOIN build USING (build_id)
                      WHERE task.task_id = %s""",
         (task_id,),
     )
-    build_id, commit_id, task_name, position, status, created, modified = (
-        cursor.fetchone()
-    )
+    (
+        build_id,
+        commit_id,
+        task_name,
+        position,
+        status,
+        task_url,
+        build_url,
+        created,
+        modified,
+    ) = cursor.fetchone()
     message = {
         "build_id": build_id,
         "task_id": task_id,
@@ -193,6 +201,8 @@ def make_task_status_message(conn, task_id):
         "task_name": task_name,
         "position": position,
         "status": status,
+        "task_url": task_url,
+        "build_url": build_url,
         "created": created.isoformat(),
         "modified": modified.isoformat(),
     }

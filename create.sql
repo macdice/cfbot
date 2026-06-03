@@ -118,6 +118,7 @@ CREATE TABLE public.build (
     branch_name text,
     status text,
     commit_id text,
+    html_url text,
     created timestamp with time zone NOT NULL,
     modified timestamp with time zone NOT NULL
 );
@@ -201,6 +202,7 @@ CREATE TABLE public.task (
     "position" integer NOT NULL,
     task_name text NOT NULL,
     status text NOT NULL,
+    html_url text,
     created timestamp with time zone NOT NULL,
     modified timestamp with time zone NOT NULL
 );

@@ -78,6 +78,16 @@ POST_TASK_STATUSES = (
 )
 
 
+# When accepting webhooks, we only allow "forward" progress.  If we
+# get an update that doesn't satisfy this requirement, we'll assume
+# it's probably somehow out of order, and schedule a full poll of the
+# workflow run.
+def status_follows_p(a, b):
+    # This list's order will do ...
+    s = POST_TASK_STATUSES
+    return a in s and b in s and s.index(a) < s.index(b)
+
+
 # Github runs (builds), jobs (tasks) and steps (task_commands) have
 # "status" and "conclusion".  Convert to the unified task status
 # values we inherited from Cirrus.
@@ -319,16 +329,133 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
                 )
 
 
-# task row should be locked, must be a new task or change in status
-def process_new_task_status(
-    cursor, task_id, old_task_status, task_status, source, timestamp
-):
-    # log new/changed status, update if changed
-    if old_task_status:
-        assert old_task_status != task_status
-        logging.info(
-            "task %s %s -> %s [%s]", task_id, old_task_status, task_status, source
+# ======================================================================
+# Functions used to ingest status changes received from webhooks OR
+# polling stale-looking builds/tasks via the API.
+# ======================================================================
+
+
+def ingest_build(conn, build_id, commit_id, branch_name, build_status, source):
+    repo, run_id, run_attempt = split_build_id(build_id)
+    html_url = (
+        "https://api.github.com/repos/"
+        + repo
+        + "/actions/runs/"
+        + run_id
+        + "/attempts/"
+        + run_attempt
+    )
+
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO build (build_id,
+                              branch_name,
+                              status,
+                              commit_id,
+                              html_url,
+                              created,
+                              modified)
+           VALUES (%s, %s, %s, %s, %s, now(), now())
+           ON CONFLICT DO NOTHING""",
+        (build_id, branch_name, build_status, commit_id, html_url),
+    )
+
+    if cursor.rowcount == 1:
+        logging.info("new build %s %s [%s]", build_id, build_status, source)
+    else:
+        cursor.execute(
+            """SELECT status
+                 FROM build
+                WHERE build_id = %s
+                  FOR UPDATE""",
+            (build_id,),
         )
+        (old_build_status,) = cursor.fetchone()
+        if build_status == old_build_status:
+            return
+        if source == "webhook" and not status_follows_p(old_build_status, build_status):
+            cfbot_work_queue.insert_work_queue_if_not_exists(
+                cursor, "poll-github-run", build_id
+            )
+            return
+        cursor.execute(
+            """UPDATE build
+                  SET status = %s,
+                      modified = now()
+                WHERE build_id = %s""",
+            (build_status, build_id),
+        )
+        logging.info(
+            "build %s %s -> %s [%s]", build_id, old_build_status, build_status, source
+        )
+
+    cursor.execute(
+        """INSERT INTO build_status_history(build_id, status, received, source)
+           VALUES (%s, %s, now(), %s)""",
+        (build_id, build_status, source),
+    )
+    update_branch(cursor, build_id, build_status, commit_id, branch_name)
+
+
+def ingest_task(conn, build_id, task_id, task_status, task_name, position, source):
+    repo, run_id, run_attempt = split_build_id(build_id)
+    repo, job_id = split_task_id(task_id)
+    task_html_url = (
+        "https://github.com/" + repo + "/actions/runs/" + run_id + "/job/" + job_id
+    )
+
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT build_id
+             FROM build
+            WHERE build_id = %s
+              FOR UPDATE""",
+        (build_id,),
+    )
+    if not cursor.fetchone():
+        cfbot_work_queue.insert_work_queue_if_not_exists(
+            cursor, "poll-github-run", build_id
+        )
+        return
+    cursor.execute(
+        """INSERT INTO task (task_id,
+                             build_id,
+                             position,
+                             task_name,
+                             status,
+                             html_url,
+                             created,
+                             modified)
+           VALUES (%s, %s, %s, %s, %s, %s, now(), now())
+               ON CONFLICT DO NOTHING""",
+        (
+            task_id,
+            build_id,
+            position,
+            task_name,
+            task_status,
+            task_html_url,
+        ),
+    )
+
+    if cursor.rowcount == 1:
+        logging.info("new task %s %s [%s]", task_id, task_status, source)
+    else:
+        cursor.execute(
+            """SELECT status
+                 FROM task
+                WHERE task_id = %s
+                  FOR UPDATE""",
+            (task_id,),
+        )
+        (old_task_status,) = cursor.fetchone()
+        if task_status == old_task_status:
+            return
+        if source == "webhook" and not status_follows_p(old_task_status, task_status):
+            cfbot_work_queue.insert_work_queue_if_not_exists(
+                cursor, "poll-github-run", build_id
+            )
+            return
         cursor.execute(
             """UPDATE task
                   SET status = %s,
@@ -336,214 +463,41 @@ def process_new_task_status(
                 WHERE task_id = %s""",
             (task_status, task_id),
         )
-    else:
-        logging.info("new task %s %s [%s]", task_id, task_status, source)
-        # caller inserted task
-
-    # maintain the history of status changes
-    cursor.execute(
-        """INSERT INTO task_status_history(task_id, status, received, source, timestamp)
-           VALUES (%s, %s, now(), %s, to_timestamp(%s::double precision / 1000))""",
-        (task_id, task_status, source, timestamp),
-    )
-
-    # generate extra jobs depending on status
-    if task_status in POST_TASK_STATUSES:
-        cfbot_work_queue.insert_work_queue_if_not_exists(
-            cursor, "post-task-status", task_id
-        )
-
-    # XXX Here we used to kick off the workflow that pulls down and
-    # scrapes logs, test results etc.  That isn't implemented for
-    # Github Actions yet.  FIXME
-    #
-    # if task_status in FINAL_TASK_STATUSES:
-    #    cfbot_work_queue.insert_work_queue(cursor, "fetch-task-commands", task_id)
-
-
-# build row should be locked, must be new build or change in status.
-def process_new_build_status(
-    cursor,
-    build_id,
-    old_build_status,
-    build_status,
-    commit_id,
-    branch_name,
-    source,
-):
-    # log new/changed status, update if changed
-    if old_build_status:
-        assert old_build_status != build_status
         logging.info(
-            "build %s %s -> %s [%s]", build_id, old_build_status, build_status, source
+            "task %s %s -> %s [%s]", task_id, old_task_status, task_status, source
         )
-    else:
-        logging.info("new build %s %s [%s]", build_id, build_status, source)
-    cursor.execute(
-        """UPDATE build
-              SET status = %s,
-                  commit_id = coalesce(commit_id, %s),
-                  branch_name = coalesce(branch_name, %s),
-                  modified = now()
-            WHERE build_id = %s""",
-        (build_status, commit_id, branch_name, build_id),
-    )
 
-    # maintain the history of status changes
     cursor.execute(
-        """INSERT INTO build_status_history(build_id, status, received, source)
-           VALUES (%s, %s, now(), %s)""",
-        (build_id, build_status, source),
+        """INSERT INTO task_status_history (task_id, status, received, timestamp, source)
+           VALUES (%s, %s, now(), now(), %s)""",
+        (task_id, task_status, source),
+    )
+    cfbot_work_queue.insert_work_queue_if_not_exists(
+        cursor, "post-task-status", task_id
     )
 
 
-# Poll a run (build) and figure out what has changed.
-#
-# This is called when a build row in non-final status hasn't had an
-# update for a while, and (for now) whenever a webhook arrives
-# relating to this build (run) or a task (job) it contains.
-def poll_run(conn, repo, run_id, run_attempt, source):
-
+def poll_workflow_run(conn, repo, run_id, run_attempt):
     build_id = make_build_id(repo, run_id, run_attempt)
-
-    # What triggered this.  This is only used so that the
-    # (build|task)_status_history table can show when webhooks were
-    # missed and we had to poll based on timeouts.
-    assert source in ("webhook", "poll")
-
-    cursor = conn.cursor()
-
-    # Serialise the API calls about this build by making sure we have a row to
-    # lock first.
-    cursor.execute(
-        """INSERT INTO build (build_id, created, modified)
-           VALUES (%s, now(), now())
-      ON CONFLICT DO NOTHING""",
-        (build_id,),
-    )
-    inserted = cursor.rowcount > 0
-    cursor.execute(
-        """SELECT status
-             FROM build
-            WHERE build_id = %s
-              FOR UPDATE""",
-        (build_id,),
-    )
-    (old_build_status,) = cursor.fetchone()
-
-    # Network API call (regrettably while holding a lock...)
-    build = get_github_api(
-        repo, "runs/" + run_id + "/attempts/" + run_attempt, none_for_404=True
-    )
-
-    if not build:
-        logging.info(
-            "Github does not know workflow run %s, existing status %s",
-            build_id,
-            old_build_status,
-        )
-        if old_build_status == None:
-            # Make sure we don't leave our weird NULL record behind for other
-            # transactions to see.
-            cursor.execute(
-                """DELETE FROM build
-                    WHERE build_id = %s
-                      AND status IS NULL""",
-                (build_id,),
-            )
-        else:
-            # Huh... it went away?  No point in polling again.
-            process_new_build_status(
-                cursor, build_id, old_build_status, "DELETED", None, None, source
-            )
-        return
-
-    commit_id = build["head_sha"]
+    run = get_github_api(repo, "runs/" + run_id + "/attempts/" + run_attempt)
+    commit_id = run["head_sha"]
+    branch_name = run["head_branch"]
     build_status = convert_github_status_and_conclusion(
-        build["status"], build["conclusion"]
+        run["status"], run["conclusion"]
     )
-    build_branch = build["head_branch"]
-
-    tasks = get_github_api(
+    ingest_build(conn, build_id, commit_id, branch_name, build_status, "poll")
+    jobs = get_github_api(
         repo, "runs/" + run_id + "/attempts/" + run_attempt + "/jobs"
     )["jobs"]
-
-    # Upsert the tasks.
     position = 0
-    for task in tasks:
-        task_id = make_task_id(repo, task["id"])
-        task_name = task["name"]
+    for job in jobs:
+        task_id = make_task_id(repo, job["id"])
+        task_name = job["name"]
         task_status = convert_github_status_and_conclusion(
-            task["status"], task["conclusion"]
+            job["status"], job["conclusion"]
         )
         position += 1
-
-        # Cirrus gave us "last status change" timestamps, but not
-        # Github...
-        #
-        # XXX Drop this column?  Make it nullable and set it only for
-        # created and completed where we receive a GH-generated
-        # timestamp?
-        task_timestamp = "0"  # task["statusTimestamp"]
-
-        # check if we already have this task, and what its status is
-        cursor.execute(
-            """SELECT status, status != %s
-                 FROM task
-                WHERE task_id = %s
-                  FOR UPDATE""",
-            (task_status, task_id),
-        )
-        if row := cursor.fetchone():
-            # process change, if it is different
-            (old_task_status, change) = row
-            if change:
-                process_new_task_status(
-                    cursor,
-                    task_id,
-                    old_task_status,
-                    task_status,
-                    source,
-                    task_timestamp,
-                )
-        else:
-            # a task we haven't heard about before
-            cursor.execute(
-                """INSERT INTO task (task_id, build_id, position, task_name, status, created, modified)
-                   VALUES (%s, %s, %s, %s, %s, now(), now())""",
-                (
-                    task_id,
-                    build_id,
-                    position,
-                    task_name,
-                    task_status,
-                ),
-            )
-            process_new_task_status(
-                cursor, task_id, None, task_status, source, task_timestamp
-            )
-
-            # tell the commitfest app
-            if task_status in POST_TASK_STATUSES:
-                cfbot_work_queue.insert_work_queue_if_not_exists(
-                    cursor, "post-task-status", task_id
-                )
-
-    # Process branch changes.  This also sets the commit_id and branch_name due
-    # to our strange protocol above...
-    if old_build_status != build_status:
-        process_new_build_status(
-            cursor,
-            build_id,
-            old_build_status,
-            build_status,
-            commit_id,
-            build_branch,
-            source,
-        )
-
-    # maybe update the branch too
-    update_branch(cursor, build_id, build_status, commit_id, build_branch)
+        ingest_task(conn, build_id, task_id, task_status, task_name, position, "poll")
 
 
 # Find out about all runs associated with a repo + commit ID.
@@ -798,22 +752,31 @@ def refresh_build_status_statistics(conn):
 
 
 def ingest_workflow_run(conn, event):
-    # XXX not used yet...
-    pass
+    repo = event["repository"]["full_name"]
+    run_id = event["workflow_run"]["id"]
+    run_attempt = event["workflow_run"]["run_attempt"]
+    build_id = make_build_id(repo, run_id, run_attempt)
+    commit_id = event["workflow_run"]["head_sha"]
+    branch_name = event["workflow_run"]["head_branch"]
+    status = event["workflow_run"]["status"]
+    conclusion = event["workflow_run"]["conclusion"]
+    build_status = convert_github_status_and_conclusion(status, conclusion)
+    ingest_build(conn, build_id, commit_id, branch_name, build_status, "webhook")
 
 
 def ingest_workflow_job(conn, event):
-    cursor = conn.cursor()
-    # XXX ignore the status information in the webhook for now (due to
-    # lack of ability to sequence correctly), and just enqueue a job
-    # to poll the whole run with the API (while holding a lock)
     repo = event["repository"]["full_name"]
     run_id = event["workflow_job"]["run_id"]
     run_attempt = event["workflow_job"]["run_attempt"]
     build_id = make_build_id(repo, run_id, run_attempt)
-    cfbot_work_queue.insert_work_queue_if_not_exists(
-        cursor, "poll-github-run-on-webhook", build_id
-    )
+    job_id = event["workflow_job"]["id"]
+    task_id = make_task_id(repo, job_id)
+    task_name = event["workflow_job"]["name"]
+    status = event["workflow_job"]["status"]
+    conclusion = event["workflow_job"]["conclusion"]
+    task_status = convert_github_status_and_conclusion(status, conclusion)
+    position = 0  # ???
+    ingest_task(conn, build_id, task_id, task_status, task_name, position, "webhook")
 
 
 # ======================================================================
@@ -824,7 +787,7 @@ def ingest_workflow_job(conn, event):
 # poll-github-commit
 def poll_github_commit(conn, key):
     # Enqueued by check_stale_branches() when we haven't heard any
-    # news about a commit ID for a while.
+    # news at all about a commit ID for a while.
     repo, commit_id = key.split(":")
     poll_commit(conn, repo, commit_id)
 
@@ -834,15 +797,7 @@ def poll_github_run(conn, key):
     # Enqueued by check_stale_builds() when we haven't heard any news
     # about a build for a statistically unlikely period of time.
     repo, run_id, run_attempt = split_build_id(key)
-    poll_run(conn, repo, run_id, run_attempt, "poll")
-
-
-# poll-github-run-on-webhook
-def poll_github_run_on_webhook(conn, key):
-    # Enqueued by ingest_workflow_job() when we receive a webhook
-    # poke from Github.
-    repo, run_id, run_attempt = split_build_id(key)
-    poll_run(conn, repo, run_id, run_attempt, "webhook")
+    poll_workflow_run(conn, repo, run_id, run_attempt)
 
 
 # ======================================================================
