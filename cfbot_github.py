@@ -338,7 +338,7 @@ def update_branch(cursor, build_id, build_status, commit_id, build_branch):
 def ingest_build(conn, build_id, commit_id, branch_name, build_status, source):
     repo, run_id, run_attempt = split_build_id(build_id)
     html_url = (
-        "https://api.github.com/repos/"
+        "https://github.com/"
         + repo
         + "/actions/runs/"
         + run_id
