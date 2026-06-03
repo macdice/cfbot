@@ -214,6 +214,7 @@ WITH task_positions AS (SELECT DISTINCT ON (task.task_name)
      latest_tasks AS   (SELECT DISTINCT ON (task.task_name)
                                task.task_name,
                                task.task_id,
+                               task.html_url,
                                task.status,
                                EXTRACT(epoch FROM now() - task.modified) AS age
                           FROM task
