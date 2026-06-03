@@ -34,20 +34,23 @@ app = Flask("cfbot_api")
 @app.route("/api/github-webhook", methods=["POST"])
 def github_webhook():
     try:
+        # This UUID can be found under the Github WebHook settings
+        # "Recent Deliveries" tab, with all the details and our
+        # response.
+        event_uuid = request.headers.get("X-Github-Delivery")
         event_type = request.headers.get("X-Github-Event")
         event = request.json
-        logging.info("Github webhook: type = %s, payload = %s", event_type, event)
+        logging.info("Github webhook: delivery = %s, type = %s", event_uuid, event_type)
         if event_type == "workflow_job":
             cfbot_github.ingest_workflow_job(conn, event)
             conn.commit()
             return "OK"
         elif event_type == "workflow_run":
-            # XXX Not used yet...
             cfbot_github.ingest_workflow_run(conn, event)
             conn.commit()
             return "OK"
         else:
-            return "not understood"
+            return "unhandled event type " + event_type
     except:
         error_cleanup()
         logging.exception("Error processing webhook")
