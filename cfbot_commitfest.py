@@ -124,13 +124,17 @@ def make_branch_status_message(conn, branch_id=None, build_id=None, commit_id=No
         filter_column = "commit_id"
 
     cursor = conn.cursor()
+    # LEFT JOIN because a branch doesn't have a build until CI reports one
     cursor.execute(
-        f"""SELECT id, build_id, commit_id, submission_id, url, status, created, modified,
+        f"""SELECT branch.id, branch.build_id, branch.commit_id, submission_id,
+                            url, branch.status, branch.created, branch.modified,
                             version, patch_count,
                             first_additions, first_deletions,
-                            all_additions, all_deletions
+                            all_additions, all_deletions,
+                            build.html_url
                       FROM branch
-                     WHERE {filter_column} = %s""",
+                 LEFT JOIN build USING (build_id)
+                     WHERE branch.{filter_column} = %s""",
         (branch_id or build_id or commit_id,),
     )
     if row := cursor.fetchone():
@@ -149,6 +153,7 @@ def make_branch_status_message(conn, branch_id=None, build_id=None, commit_id=No
             first_deletions,
             all_additions,
             all_deletions,
+            build_url,
         ) = row
     else:
         # for postgres/postgres webhooks, we won't find a branch.  the cfapp
@@ -159,6 +164,7 @@ def make_branch_status_message(conn, branch_id=None, build_id=None, commit_id=No
         "branch_name": "cf/%d" % submission_id,
         "branch_id": branch_id,
         "build_id": build_id,
+        "build_url": build_url,
         "commit_id": commit_id,
         "apply_url": url,
         "status": status,
@@ -177,7 +183,7 @@ def make_branch_status_message(conn, branch_id=None, build_id=None, commit_id=No
 def make_task_status_message(conn, task_id):
     cursor = conn.cursor()
     cursor.execute(
-        """SELECT build_id, build.commit_id, task.task_name, task.position, task.status, task.html_url, build.html_url, task.created, task.modified
+        """SELECT build_id, build.commit_id, task.task_name, task.position, task.status, task.html_url, task.created, task.modified
                       FROM task
                       JOIN build USING (build_id)
                      WHERE task.task_id = %s""",
@@ -190,7 +196,6 @@ def make_task_status_message(conn, task_id):
         position,
         status,
         task_url,
-        build_url,
         created,
         modified,
     ) = cursor.fetchone()
@@ -202,7 +207,6 @@ def make_task_status_message(conn, task_id):
         "position": position,
         "status": status,
         "task_url": task_url,
-        "build_url": build_url,
         "created": created.isoformat(),
         "modified": modified.isoformat(),
     }
