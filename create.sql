@@ -37,7 +37,7 @@ ALTER FUNCTION public.build_status_running(status text) OWNER TO cfbot;
 CREATE FUNCTION public.task_status_running(status text) RETURNS boolean
     LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
     BEGIN ATOMIC
- SELECT (status = ANY (ARRAY['CREATED'::text, 'TRIGGERED'::text, 'SCHEDULED'::text, 'EXECUTING'::text, 'SKIPPED'::text]));
+ SELECT (status = ANY (ARRAY['CREATED'::text, 'TRIGGERED'::text, 'SCHEDULED'::text, 'EXECUTING'::text]));
 END;
 
 
