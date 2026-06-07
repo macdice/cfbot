@@ -439,7 +439,7 @@ def build_page(
                         html = svg_img("new_failure")
                     else:
                         html = svg_img("old_failure")
-                elif build_result.status in ("PAUSED"):
+                elif build_result.status in ("PAUSED", "SKIPPED"):
                     html = svg_img("paused")
                 elif build_result.status in ("CREATED", "SCHEDULED", "PAUSED"):
                     html = svg_img("waiting_to_start")
