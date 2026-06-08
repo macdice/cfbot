@@ -362,16 +362,15 @@ def build_page(
       <a href="https://commitfest.postgresql.org/%s">Commitfest system</a> into
       <a href="https://github.com/postgresql-cfbot/postgresql/branches">branches on Github</a>,
       collates test results from
-      <a href="https://cirrus-ci.com/github/postgresql-cfbot/postgresql">Cirrus CI</a>, and posts the results to the Commitfest system.  Key: %s or %s = new/recently changed, %s or %s = stable, %s needs rebase but previous build was successful, %s = working.
+      <a href="https://github.com/postgresql-cfbot/postgresql/actions/workflows/pg-ci.yml">a Github Actions workflow</a>, and posts the results to the Commitfest system.  Key: %s or %s = new/recently changed, %s or %s = stable, %s needs rebase but previous build was successful, %s = working.
     </p>
     <p>
       News: This page is no longer the best place to see Commitfest CI
-      results.
-      Please check the Commitfest system itself.
+      results, and may be replaced with cfbot health information.
+      Please check the Commitfest system itself for CI results.
     </p>
-    <p>
-      News: The empty circles are paused CI tasks for other OSes that may be enabled soon...
-    </p>
+    <p>News: Since moving from Cirrus CI to Github Actions on 2026-06-01, cfbot has temporarily lost the ability
+      to analyse logs ("Highlights") and test results, but it will return...  The CI itself has also lost support for FreeBSD, NetBSD and OpenBSD, which Github Actions doesn't support directly, but we're looking into that...</p>
     <table>
 """
             % (
