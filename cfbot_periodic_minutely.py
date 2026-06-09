@@ -7,6 +7,7 @@ import cfbot_github
 import cfbot_patch
 import cfbot_util
 import cfbot_web
+import cfbot_work_queue
 
 import errno
 import fcntl
@@ -29,6 +30,8 @@ def try_lock():
 
 def run():
     with cfbot_util.db() as conn:
+        cfbot_work_queue.maybe_trigger_retries(conn)
+
         # get the current Commitfest ID
         cfs = cfbot_commitfest_rpc.get_current_commitfests()
 

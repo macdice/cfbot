@@ -54,6 +54,20 @@ def insert_work_queue_if_not_exists(cursor, type, key=None):
         insert_work_queue(cursor, type, key)
 
 
+def maybe_trigger_retries(conn):
+    # This is called by cfbot_periodic_minutely.py to see if we should wake up
+    # a worker to handle retries.  Not strictly necessary since there is
+    # regular traffic anyway, but...
+    cursor = conn.cursor()
+    cursor.execute("""select 1
+                        from work_queue
+                       where status = 'WORK' and lease < now()
+                       limit 1""")
+    if cursor.fetchone():
+        cursor.execute("notify work_queue")
+        conn.commit()
+
+
 def process_one_job(conn, fetch_only):
     cursor = conn.cursor()
     if fetch_only:
