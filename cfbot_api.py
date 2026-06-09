@@ -39,8 +39,12 @@ def github_webhook():
         # response.
         event_uuid = request.headers.get("X-Github-Delivery")
         event_type = request.headers.get("X-Github-Event")
-        event = request.json
         logging.info("Github webhook: delivery = %s, type = %s", event_uuid, event_type)
+        try:
+            event = request.json
+        except ValueError:
+            logging.info("could not decode JSON: %s", request.get_data(as_text=True))
+            raise
         if event_type == "workflow_job":
             cfbot_github.ingest_workflow_job(conn, event)
             conn.commit()
