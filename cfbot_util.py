@@ -1,4 +1,6 @@
 import cfbot_config
+import errno
+import fcntl
 import pg8000
 import requests
 import time
@@ -68,6 +70,30 @@ def post(url, d):
         timeout=cfbot_config.TIMEOUT,
     )
     response.raise_for_status()
+
+
+def lock():
+    """Big lock to serialise operations that interact with containers,
+    template source tree, web directory...
+
+    """
+    ### XXX We should really have finer grained locks... no need for
+    ### the crusty web stuff to block source tree manipulations...
+    fd = open(cfbot_config.LOCK_FILE, "w")
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+def try_lock():
+    fd = open(cfbot_config.LOCK_FILE, "w")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+    except IOError as e:
+        if e.errno != errno.EAGAIN:
+            raise
+        else:
+            return None
 
 
 def db():

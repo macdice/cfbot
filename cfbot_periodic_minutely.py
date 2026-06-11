@@ -9,23 +9,8 @@ import cfbot_util
 import cfbot_web
 import cfbot_work_queue
 
-import errno
-import fcntl
 import logging
 import requests
-
-
-def try_lock():
-    """Make sure that only one copy runs."""
-    fd = open(cfbot_config.LOCK_FILE, "w")
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return fd
-    except IOError as e:
-        if e.errno != errno.EAGAIN:
-            raise
-        else:
-            return None
 
 
 def run():
@@ -74,7 +59,7 @@ def run():
 
 if __name__ == "__main__":
     # don't run if we're already running
-    lock_fd = try_lock()
+    lock_fd = cfbot_util.try_lock()
     if lock_fd:
         try:
             run()
