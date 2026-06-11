@@ -46,11 +46,11 @@ def github_webhook():
             logging.info("could not decode JSON: %s", request.get_data(as_text=True))
             raise
         if event_type == "workflow_job":
-            cfbot_github.ingest_workflow_job(conn, event)
+            cfbot_github.handle_workflow_job_webhook(conn, event)
             conn.commit()
             return "OK"
         elif event_type == "workflow_run":
-            cfbot_github.ingest_workflow_run(conn, event)
+            cfbot_github.handle_workflow_run_webhook(conn, event)
             conn.commit()
             return "OK"
         else:

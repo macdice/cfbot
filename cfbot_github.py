@@ -773,7 +773,7 @@ def refresh_build_status_statistics(conn):
 # ======================================================================
 
 
-def ingest_workflow_run(conn, event):
+def handle_workflow_run_webhook(conn, event):
     repo = event["repository"]["full_name"]
     run_id = event["workflow_run"]["id"]
     run_attempt = event["workflow_run"]["run_attempt"]
@@ -786,7 +786,7 @@ def ingest_workflow_run(conn, event):
     ingest_build(conn, build_id, commit_id, branch_name, build_status, "webhook")
 
 
-def ingest_workflow_job(conn, event):
+def handle_workflow_job_webhook(conn, event):
     repo = event["repository"]["full_name"]
     run_id = event["workflow_job"]["run_id"]
     run_attempt = event["workflow_job"]["run_attempt"]
