@@ -19,6 +19,7 @@ def retry_limit(type):
         type.startswith("fetch-")
         or type.startswith("poll-")
         or type.startswith("post-")
+        or type.startswith("push-")
     ):
         # Things that hit network APIs get multiple retries
         return 3
