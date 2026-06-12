@@ -800,6 +800,27 @@ def handle_workflow_job_webhook(conn, event):
     ingest_task(conn, build_id, task_id, task_status, task_name, "webhook")
 
 
+def handle_push(conn, event):
+    repo = event["repository"]["full_name"]
+    if repo != cfbot_config.GITHUB_MIRROR_FULL_REPO:
+        # We only mirror branches from postgres/postgres (which is itself a
+        # mirror of the actual self-hosted postgresql.org repo).
+        return
+    ref = event["ref"]
+    if not ref.startswith("refs/head/"):
+        # We don't mirror refs/tag/... should we?
+        return
+    branch = ref[10:]
+    if not re.match(cfbot_config.GITHUB_MIRROR_BRANCH_PATTERN, branch):
+        # Only mirror branches that match our configured pattern (though
+        # we don't actually expect postgres/postgres to have any non-matching
+        # branches).
+        return
+    cursor = conn.cursor()
+    # Actual mirroring work is handed off to a cfbot worker.
+    cfbot_work_queue.insert_work_queue(cursor, "push-mirror-branch", branch)
+
+
 # ======================================================================
 # Functions called by cfbot workers servicing work_queue items.
 # ======================================================================

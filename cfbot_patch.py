@@ -165,11 +165,20 @@ def choose_submission(conn, cf_ids):
     return commitfest_id, submission_id
 
 
-def update_patchbase_tree(repo_dir):
-    """Pull changes from PostgreSQL master and return the HEAD commit ID."""
+def checkout_patchbase_branch(repo_dir, branch):
+    """Switch patchbase repo to a given branch."""
     subprocess.call(
-        "cd %s && git checkout . -q > /dev/null && git clean -fd > /dev/null && git checkout -q master && git pull -q"
-        % repo_dir,
+        "cd %s && git checkout . -q > /dev/null && git clean -fd > /dev/null && git checkout -q %s"
+        % (repo_dir, branch),
+        shell=True,
+    )
+
+
+def update_patchbase_tree(repo_dir, branch):
+    """Switch branch and pull changes from tracked remote."""
+    checkout_patchbase_branch(repo_dir, branch)
+    subprocess.call(
+        "cd %s && git pull -q" % (repo_dir, branch),
         shell=True,
     )
 
@@ -310,6 +319,29 @@ def update_submission(conn, message_id, commit_id, commitfest_id, submission_id)
     )
 
 
+def mirror_branch(branch):
+    template_repo_path = patchburner_ctl("template-repo-path").strip()
+
+    # Everything else in this file assumes that
+    # cfbot_periodic_minutely.py acquired the "big lock" while
+    # applying patches etc, but this function is reached by cfbot
+    # workers, and needs interlocking so it does that explicitly here.
+    with cfbot_util.lock():
+        logging.info("updating branch %s in template repo", branch)
+        update_patchbase_tree(template_repo_path, branch)
+        if cfbot_config.GIT_REMOTE_NAME:
+            logging.info("pushing branch %s (automatic mirror)", branch)
+            my_env = os.environ.copy()
+            my_env["GIT_SSH_COMMAND"] = cfbot_config.GIT_SSH_COMMAND
+            subprocess.check_call(
+                "cd %s && git push -q -f %s %s"
+                % (template_repo_path, cfbot_config.GIT_REMOTE_NAME, branch),
+                env=my_env,
+                shell=True,
+                stderr=subprocess.DEVNULL,
+            )
+
+
 def reset_repo_to_good_master_commit(conn, repo_path):
     # find the most recent commit ID that succeeded on master
     cursor = conn.cursor()
@@ -324,16 +356,18 @@ def reset_repo_to_good_master_commit(conn, repo_path):
         (good_commit_id,) = result
     else:
         good_commit_id = "origin/master"
+    logging.info("selected master commit %s as base", good_commit_id)
 
+    checkout_patchbase_branch(repo_path, "master")
     commit_id = get_commit_id(repo_path)
+
     if commit_id != good_commit_id:
-        logging.info("updating repo to find last good master commit %s", good_commit_id)
-        update_patchbase_tree(repo_path)
-
-    reset_commit_id(repo_path, good_commit_id)
-    commit_id = get_commit_id(repo_path)
-    if good_commit_id != "origin/master":
-        assert commit_id == good_commit_id
+        logging.info("updating template repo")
+        update_patchbase_tree(repo_path, "master")
+        reset_commit_id(repo_path, good_commit_id)
+        commit_id = get_commit_id(repo_path)
+        if good_commit_id != "origin/master":
+            assert commit_id == good_commit_id
 
     return commit_id
 

@@ -53,6 +53,10 @@ def github_webhook():
             cfbot_github.handle_workflow_run_webhook(conn, event)
             conn.commit()
             return "OK"
+        elif event_type == "push":
+            cfbot_github.handle_push_webhook(conn, event)
+            conn.commit()
+            return "OK"
         else:
             return "unhandled event type " + event_type
     except:
