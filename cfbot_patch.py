@@ -178,7 +178,7 @@ def update_patchbase_tree(repo_dir, branch):
     """Switch branch and pull changes from tracked remote."""
     checkout_patchbase_branch(repo_dir, branch)
     subprocess.call(
-        "cd %s && git pull -q" % (repo_dir, branch),
+        "cd %s && git pull -q" % repo_dir,
         shell=True,
     )
 

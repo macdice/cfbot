@@ -4,6 +4,7 @@ import cfbot_commitfest
 import cfbot_config
 import cfbot_github
 import cfbot_highlights
+import cfbot_patch
 import cfbot_util
 import re
 import select
