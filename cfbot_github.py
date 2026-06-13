@@ -800,7 +800,7 @@ def handle_workflow_job_webhook(conn, event):
     ingest_task(conn, build_id, task_id, task_status, task_name, "webhook")
 
 
-def handle_push(conn, event):
+def handle_push_webhook(conn, event):
     repo = event["repository"]["full_name"]
     if repo != cfbot_config.GITHUB_MIRROR_FULL_REPO:
         # We only mirror branches from postgres/postgres (which is itself a
