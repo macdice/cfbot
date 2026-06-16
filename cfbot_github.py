@@ -807,10 +807,10 @@ def handle_push_webhook(conn, event):
         # mirror of the actual self-hosted postgresql.org repo).
         return
     ref = event["ref"]
-    if not ref.startswith("refs/head/"):
+    if not ref.startswith("refs/heads/"):
         # We don't mirror refs/tag/... should we?
         return
-    branch = ref[10:]
+    branch = ref[11:]
     if not re.match(cfbot_config.GITHUB_MIRROR_BRANCH_PATTERN, branch):
         # Only mirror branches that match our configured pattern (though
         # we don't actually expect postgres/postgres to have any non-matching
