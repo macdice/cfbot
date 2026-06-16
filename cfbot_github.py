@@ -805,19 +805,23 @@ def handle_push_webhook(conn, event):
     if repo != cfbot_config.GITHUB_MIRROR_FULL_REPO:
         # We only mirror branches from postgres/postgres (which is itself a
         # mirror of the actual self-hosted postgresql.org repo).
+        logging.info("ignoring push event from repo %s", repo)
         return
     ref = event["ref"]
     if not ref.startswith("refs/heads/"):
         # We don't mirror refs/tag/... should we?
+        logging.info("ignoring push event from repo %s ref %s", repo, ref)
         return
     branch = ref[11:]
     if not re.match(cfbot_config.GITHUB_MIRROR_BRANCH_PATTERN, branch):
         # Only mirror branches that match our configured pattern (though
         # we don't actually expect postgres/postgres to have any non-matching
         # branches).
+        logging.info("ignoring push event from repo %s branch %s", repo, branch)
         return
     cursor = conn.cursor()
     # Actual mirroring work is handed off to a cfbot worker.
+    logging.info("will mirror repo %s branch %s", repo, branch)
     cfbot_work_queue.insert_work_queue(cursor, "push-mirror-branch", branch)
 
 
