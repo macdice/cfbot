@@ -343,14 +343,16 @@ def mirror_branch(branch):
 
 
 def reset_repo_to_good_master_commit(conn, repo_path):
-    # find the most recent commit ID that succeeded on master
+    # find the most recent commit ID that succeeded on master (our
+    # mirror of it, in cfbot's repo, for best cache-sharing)
     cursor = conn.cursor()
     cursor.execute("""SELECT commit_id
                         FROM build
                        WHERE branch_name = 'master'
+                         AND build_id LIKE '%s:%%'
                          AND status = 'COMPLETED'
                     ORDER BY created DESC
-                       LIMIT 1""")
+                       LIMIT 1""" % cfbot_config.GITHUB_FULL_REPO)
     result = cursor.fetchone()
     if result:
         (good_commit_id,) = result
