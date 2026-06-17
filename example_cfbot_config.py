@@ -10,9 +10,6 @@ GITHUB_REPO = "postgres"
 
 GITHUB_FULL_REPO = f"{GITHUB_USER}/{GITHUB_REPO}"
 
-# which CI providers are enabled
-CI_MODULES = ("cirrus",)
-
 # Some settings are different for our production server
 PRODUCTION = False
 
@@ -20,6 +17,23 @@ PRODUCTION = False
 COMMITFEST_HOST = "https://commitfest.postgresql.org"
 COMMITFEST_SHARED_SECRET = "INSECURE"
 COMMITFEST_POST_URL = "http://localhost:8007/cfbot_notify/"
+
+# If we receive "push" notifications matching these settings, we'll
+# automatically mirror them to branches of the same name in our output repo (if
+# configured above).
+GITHUB_MIRROR_USER = "postgres"
+GITHUB_MIRROR_REPO = "postgres"
+GITHUB_MIRROR_FULL_REPO = f"{GITHUB_MIRROR_USER}/{GITHUB_MIRROR_REPO}"
+GITHUB_MIRROR_BRANCH_PATTERN = r"^(master|REL_[0-9]+_STABLE)$"
+
+GITHUB_TOKENS = {
+    # "postgres/postgres" : "token_goes_here",
+    # ...
+}
+
+# Paths that we don't allow patches to modify, to prevent privilege escalation
+# of Github Actions.
+PUSH_BLOCKED_PATTERN = r"^\.github/workflows/.*$"
 
 # http settings (be polite by identifying ourselves and limited rate)
 # SLOW_FETCH_SLEEP = 1.0
