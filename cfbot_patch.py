@@ -383,6 +383,10 @@ def process_submission(conn, commitfest_id, submission_id):
     # create a fresh patchburner jail
     patchburner_ctl("destroy")
     patchburner_ctl("create")
+
+    # note the base commit, so we can see which files are changed
+    base_commit = get_commit_id(burner_repo_path)
+
     # find out where to put the patches so the jail can see them
     # fetch the patches from the thread and put them in the patchburner's
     # filesystem
@@ -461,6 +465,23 @@ def process_submission(conn, commitfest_id, submission_id):
             ).strip()
         )
 
+        # check for paths that we don't allow patches to modify
+        #
+        # XXX We could have an endpoint that the cf app could use to "release"
+        # this blocked branch (ie try again).  We'd probably need to change the
+        # lifecycle of "branch" records, ie create them *before* trying to
+        # apply, rather than after, and then have work queue jobs that work on
+        # them, or something like that?
+        changed_files = capture(
+            "git diff --name-only %s" % base_commit, cwd=burner_repo_path
+        )
+        push_blocked = False
+        for name in changed_files:
+            name = name.rstrip()
+            if re.match(cfbot_config.PUSH_BLOCKED_PATTERN, name):
+                logging.info("patch changes file %s, blocking", name)
+                push_blocked = True
+
         # we committed the patches; now add a final merge commit with some metadata
         add_merge_commit(
             conn, burner_repo_path, commitfest_id, submission_id, message_id, version
@@ -476,7 +497,7 @@ def process_submission(conn, commitfest_id, submission_id):
             all_additions, all_deletions = 0, 0
 
         # push it to the remote monitored repo, if configured
-        if cfbot_config.GIT_REMOTE_NAME:
+        if not push_blocked and cfbot_config.GIT_REMOTE_NAME:
             logging.info("pushing branch %s" % branch)
             my_env = os.environ.copy()
             my_env["GIT_SSH_COMMAND"] = cfbot_config.GIT_SSH_COMMAND
@@ -489,12 +510,17 @@ def process_submission(conn, commitfest_id, submission_id):
             )
         # record the apply status
         ci_commit_id = get_commit_id(burner_repo_path)
+        if push_blocked:
+            branch_status = "blocked"
+        else:
+            branch_status = "testing"
         cursor.execute(
-            """INSERT INTO branch (commitfest_id, submission_id, commit_id, status, url, created, modified, version, patch_count, first_additions, first_deletions, all_additions, all_deletions) VALUES (%s, %s, %s, 'testing', %s, now(), now(), %s, %s, %s, %s, %s, %s) RETURNING id""",
+            """INSERT INTO branch (commitfest_id, submission_id, commit_id, status, url, created, modified, version, patch_count, first_additions, first_deletions, all_additions, all_deletions) VALUES (%s, %s, %s, %s, %s, now(), now(), %s, %s, %s, %s, %s, %s) RETURNING id""",
             (
                 commitfest_id,
                 submission_id,
                 ci_commit_id,
+                branch_status,
                 log_url,
                 version,
                 commit_count,
