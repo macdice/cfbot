@@ -142,8 +142,8 @@ def split_task_id(task_id):
 # as a Python object.
 #
 # repo includes the user, like "postgres/postgres".
-def get_github_api(repo, action, params=None, none_for_404=False):
-    url = "https://api.github.com/repos/" + repo + "/actions/" + action
+def get_github_api(repo, action, params=None, none_for_404=False, prefix="actions/"):
+    url = "https://api.github.com/repos/" + repo + "/" + prefix + action
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2026-03-10",
@@ -768,6 +768,88 @@ def refresh_build_status_statistics(conn):
                        group by 1, 2""")
 
 
+def gc_remote_branches(conn):
+    # This horrible big lock prevents branches from being created or deleted
+    # while we are paginating through them...
+    #
+    # XXX Could do better than this... one problem is that we only create
+    # branch records after pushing, creating a window for deleting a branch
+    # we'd just pushed...
+    with cfbot_util.lock():
+        # File the branches that still have build records
+        cursor = conn.cursor()
+
+        # Find all the branches we still have builds for.
+        live_branches = set()
+        cursor.execute(
+            """select distinct branch_name
+                            from build
+                           where build_id like %s || ':%%'
+                           order by 1""",
+            (cfbot_config.GITHUB_FULL_REPO,),
+        )
+        for (branch,) in cursor:
+            live_branches.add(branch)
+
+        # There could also be very recently pushed branches that we don't have
+        # a build for yet.
+        #
+        # XXX Maybe branch needs a branch_name column?  This is not nice...
+        cursor.execute("""select distinct 'cf/' || submission_id
+                            from branch
+                           where created > now() - interval '24 hours'""")
+        for (branch,) in cursor:
+            live_branches.add(branch)
+
+        # We can delete branches in batches (this is limited by command line
+        # length and by index key length, but 512 has worked...).
+        BATCH_SIZE = 128
+        MAX_BATCHES = 4
+        batches = 0
+        batch = []
+
+        # Since we don't have a stable snapshot due to pagination via the API,
+        # deduplicate the branch names we see.
+        seen_branches = set()
+
+        page = 0
+        while batches < MAX_BATCHES:
+            remote_branches = get_github_api(
+                cfbot_config.GITHUB_FULL_REPO,
+                "branches",
+                prefix="",
+                params={"per_page": "100", "page": str(page)},
+            )
+            # print("page %s got %s branches" % (page, len(remote_branches)))
+            if len(remote_branches) == 0:
+                break
+            for remote_branch in remote_branches:
+                branch = remote_branch["name"]
+                if branch in seen_branches:
+                    continue
+                seen_branches.add(branch)
+                if re.match(cfbot_config.GITHUB_MIRROR_BRANCH_PATTERN, branch):
+                    continue
+                if branch in live_branches:
+                    continue
+                logging.info("will drop unreferenced remote branch " + branch)
+                batch.append(branch)
+                if len(batch) == BATCH_SIZE:
+                    cfbot_work_queue.insert_work_queue(
+                        cursor, "push-delete-branch", " ".join(batch)
+                    )
+                    batch = []
+                    batches += 1
+                    if batches == MAX_BATCHES:
+                        break
+            page += 1
+
+        if len(batch) > 0:
+            cfbot_work_queue.insert_work_queue(
+                cursor, "push-delete-branch", " ".join(batch)
+            )
+
+
 # ======================================================================
 # Functions called by flask when our webhook is called by Github.
 # ======================================================================
@@ -849,6 +931,10 @@ def poll_github_run(conn, key):
 # ======================================================================
 
 if __name__ == "__main__":
+    with cfbot_util.db() as conn:
+        gc_remote_branches(conn)
+        conn.commit()
+    exit(0)
     # print(json.dumps(get_builds_for_commit("3c970e3e544bb17a894854c027d3d3bc285fb072"), indent=4))
     # print(json.dumps(get_tasks_for_build("26492296536"), indent=4))
     # print(json.dumps(get_github_api("runs/" + "264922965360", none_for_404=True), indent=4))

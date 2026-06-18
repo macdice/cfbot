@@ -342,17 +342,39 @@ def mirror_branch(branch):
             )
 
 
+def delete_branch(branch):
+    template_repo_path = patchburner_ctl("template-repo-path").strip()
+
+    # XXX Not sure if we really need this lock since it's entirely operating on
+    # the remote repo...
+    with cfbot_util.lock():
+        if cfbot_config.GIT_REMOTE_NAME:
+            logging.info("deleting branch %s", branch)
+            my_env = os.environ.copy()
+            my_env["GIT_SSH_COMMAND"] = cfbot_config.GIT_SSH_COMMAND
+            subprocess.check_call(
+                "cd %s && git push -q --delete %s %s"
+                % (template_repo_path, cfbot_config.GIT_REMOTE_NAME, branch),
+                env=my_env,
+                shell=True,
+                # stderr=subprocess.DEVNULL,
+            )
+
+
 def reset_repo_to_good_master_commit(conn, repo_path):
     # find the most recent commit ID that succeeded on master (our
     # mirror of it, in cfbot's repo, for best cache-sharing)
     cursor = conn.cursor()
-    cursor.execute("""SELECT commit_id
+    cursor.execute(
+        """SELECT commit_id
                         FROM build
                        WHERE branch_name = 'master'
                          AND build_id LIKE '%s:%%'
                          AND status = 'COMPLETED'
                     ORDER BY created DESC
-                       LIMIT 1""" % cfbot_config.GITHUB_FULL_REPO)
+                       LIMIT 1"""
+        % cfbot_config.GITHUB_FULL_REPO
+    )
     result = cursor.fetchone()
     if result:
         (good_commit_id,) = result

@@ -143,6 +143,8 @@ def process_one_job(conn, fetch_only):
         # Mirroring master, REL_*_STABLE
         elif type == "push-mirror-branch":
             cfbot_patch.mirror_branch(key)
+        elif type == "push-delete-branch":
+            cfbot_patch.delete_branch(key)
         # Notifying the Commitfest app
         elif type == "post-task-status":
             cfbot_commitfest.post_task_status(conn, key)
